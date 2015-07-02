@@ -2,7 +2,9 @@
   :dependencies '[[org.clojure/clojurescript "0.0-3308"]
                   [org.clojure/core.async "0.1.346.0-17112a-alpha"]])
 
-(deftask poly []
+(deftask poly
+  "Set env and task options for -poly tasks."
+  []
   (set-env!
    :resource-paths #{"src/ion/poly"})
   (task-options!
@@ -11,9 +13,12 @@
         :description "ClojureScript application utilities"
         :license {"EPL" "http://www.eclipse.org/legal/epl-v10.html"}
         :scm {:url "https://github.com/decomplect/ion/src/ion/poly"}
-        :url "https://github.com/decomplect/ion"}))
+        :url "https://github.com/decomplect/ion"})
+  identity)
 
-(deftask build-poly []
+(deftask build-poly
+  "Build and install the ion.poly library."
+  []
   (comp (poly)
         (pom)
         (jar)
