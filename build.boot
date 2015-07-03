@@ -1,6 +1,5 @@
 (set-env!
-  :dependencies '[[org.clojure/clojurescript "0.0-3308"]
-                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]])
+  :dependencies '[[org.clojure/core.async "0.1.346.0-17112a-alpha"]])
 
 (deftask poly
   "Set env and task options for -poly tasks."
