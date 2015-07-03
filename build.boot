@@ -8,7 +8,7 @@
    :resource-paths #{"src/ion/poly"})
   (task-options!
    pom {:project 'ion/poly
-        :version "0.1.0"
+        :version "0.1.0-SNAPSHOT"
         :description "ClojureScript application utilities"
         :license {"EPL" "http://www.eclipse.org/legal/epl-v10.html"}
         :scm {:url "https://github.com/decomplect/ion/src/ion/poly"}
