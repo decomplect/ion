@@ -21,5 +21,6 @@
   []
   (comp (poly)
         (pom)
+        (sift :move {#"(^.*\.cljs)$" "ion/poly/$1"})
         (jar)
         (install)))
