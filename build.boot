@@ -1,6 +1,8 @@
 (set-env!
   :dependencies '[[org.clojure/core.async "0.1.346.0-17112a-alpha"]])
 
+(def *re-clj-files* #"(^.*\.cljs)$")
+
 (deftask cuss
   "Set env and task options for -cuss tasks."
   []
@@ -13,7 +15,7 @@
         :license {"EPL" "http://www.eclipse.org/legal/epl-v10.html"}
         :scm {:url "https://github.com/decomplect/ion/src/ion/cuss"}
         :url "https://github.com/decomplect/ion"}
-   sift {:move {#"(^.*\.cljs)$" "ion/poly/$1"}})
+   sift {:move {*re-clj-files* "ion/cuss/$1"}})
   identity)
 
 (deftask poly
@@ -28,7 +30,7 @@
         :license {"EPL" "http://www.eclipse.org/legal/epl-v10.html"}
         :scm {:url "https://github.com/decomplect/ion/src/ion/poly"}
         :url "https://github.com/decomplect/ion"}
-   sift {:move {#"(^.*\.cljs)$" "ion/poly/$1"}})
+   sift {:move {*re-clj-files* "ion/poly/$1"}})
   identity)
 
 (deftask build
