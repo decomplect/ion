@@ -1,7 +1,7 @@
 (ns ion.cuss.core
   (:refer-clojure :exclude [+ - * /])
   (:require-macros
-   [ion.cuss.macros :refer [defbreakpoint]]
+   [ion.cuss.core :refer [defbreakpoint]]
    [garden.def :refer [defcssfn defkeyframes defrule defstyles defstylesheet]])
   (:require
    [garden.arithmetic :refer [+ - * /]]

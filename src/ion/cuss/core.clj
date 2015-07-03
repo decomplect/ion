@@ -1,4 +1,4 @@
-(ns ion.cuss.macros
+(ns ion.cuss.core
   (:require
    [garden.stylesheet :refer [at-media]]))
 
