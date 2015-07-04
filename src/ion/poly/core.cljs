@@ -4,7 +4,6 @@
    [cljs.core :as cljs]
    [cljs.core.async :refer [<! >! chan close! put! sliding-buffer timeout]]
    [goog]
-   [goog.userAgent]
    [goog.date.Date]
    [goog.date.DateTime]
    [goog.date.UtcDateTime]
@@ -13,6 +12,7 @@
    [goog.events :as events]
    [goog.string]
    [goog.style])
+   [goog.userAgent]
   (:import
    [goog.dom ViewportSizeMonitor]
    [goog.events EventType]
