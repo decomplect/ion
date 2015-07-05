@@ -2,7 +2,7 @@
 
 (require '[adzerk.bootlaces :refer :all])
 
-(def +re-src-files+ #"(^.*\.clj[cs]?)$")
+(def +re-source-files+ #"(^.*\.clj[cs]?)$")
 
 (deftask cuss
   "Set env and task options for ion.cuss tasks."
@@ -18,8 +18,8 @@
           :description "ClojureScript CSS Utilities"
           :license {"EPL" "http://www.eclipse.org/legal/epl-v10.html"}
           :scm {:url "https://github.com/decomplect/ion/src/ion/cuss"}
-          :url "https://github.com/decomplect/ion"}
-     sift {:move {+re-src-files+ "ion/cuss/$1"}})
+          :url "https://github.com/decomplect/ion#cuss"}
+     sift {:move {+re-source-files+ "ion/cuss/$1"}})
     identity))
 
 (deftask poly
@@ -36,8 +36,8 @@
           :description "ClojureScript Application Utilities"
           :license {"EPL" "http://www.eclipse.org/legal/epl-v10.html"}
           :scm {:url "https://github.com/decomplect/ion/src/ion/poly"}
-          :url "https://github.com/decomplect/ion"}
-     sift {:move {+re-src-files+ "ion/poly/$1"}})
+          :url "https://github.com/decomplect/ion#poly"}
+     sift {:move {+re-source-files+ "ion/poly/$1"}})
     identity))
 
 (deftask build
