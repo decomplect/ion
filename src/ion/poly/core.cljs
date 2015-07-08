@@ -164,13 +164,6 @@
   (let [event-type (if (keyword? event-type) (keyword->event-type event-type) event-type)]
     (events/listen src event-type func)))
 
-(defn listen-take!
-  [channel func]
-  (go-loop []
-    (when-let [taken (<! channel)]
-      (func taken)
-      (recur))))
-
 (defn listen-put!
   ([src event-type channel]
    (listen! src event-type #(put! channel %))
@@ -178,6 +171,13 @@
   ([src event-type channel subject]
    (listen! src event-type #(put! channel subject))
    channel))
+
+(defn listen-take!
+  [channel func]
+  (go-loop []
+    (when-let [taken (<! channel)]
+      (func taken)
+      (recur))))
 
 
 ;; -----------------------------------------------------------------------------
