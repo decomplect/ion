@@ -154,145 +154,15 @@
 ;; -----------------------------------------------------------------------------
 ;; Event Helpers
 
-(def event-type-keywords
-  [:animation-end
-   :animation-iteration
-   :animation-start
-   :before-copy
-   :before-cut
-   :before-paste
-   :before-unload
-   :blur
-   :change
-   :click
-   :composition-end
-   :composition-start
-   :composition-update
-   :connect
-   :console-message
-   :context-menu
-   :copy
-   :cut
-   :dbl-click
-   :deactivate
-   :dom-attr-modified
-   :dom-character-data-modified
-   :dom-content-loaded
-   :dom-node-inserted
-   :dom-node-inserted-into-document
-   :dom-node-removed
-   :dom-node-removed-from-document
-   :dom-subtree-modified
-   :drag
-   :drag-end
-   :drag-enter
-   :drag-leave
-   :drag-over
-   :drag-start
-   :drop
-   :error
-   :exit
-   :focus
-   :focus-in
-   :focus-out
-   :got-pointer-capture
-   :hash-change
-   :help
-   :input
-   :key-down
-   :key-press
-   :key-up
-   :load
-   :load-abort
-   :load-commit
-   :load-redirect
-   :load-start
-   :load-stop
-   :lose-capture
-   :lost-pointer-capture
-   :message
-   :mouse-down
-   :mouse-enter
-   :mouse-leave
-   :mouse-move
-   :mouse-out
-   :mouse-over
-   :mouse-up
-   :ms-gesture-change
-   :ms-gesture-end
-   :ms-gesture-hold
-   :ms-gesture-start
-   :ms-gesture-tap
-   :ms-got-pointer-capture
-   :ms-inertia-start
-   :ms-lost-pointer-capture
-   :ms-pointer-cancel
-   :ms-pointer-down
-   :ms-pointer-enter
-   :ms-pointer-hover
-   :ms-pointer-leave
-   :ms-pointer-move
-   :ms-pointer-out
-   :ms-pointer-over
-   :ms-pointer-up
-   :offline
-   :online
-   :orientation-change
-   :page-hide
-   :page-show
-   :paste
-   :pointer-cancel
-   :pointer-down
-   :pointer-enter
-   :pointer-leave
-   :pointer-move
-   :pointer-out
-   :pointer-over
-   :pointer-up
-   :pop-state
-   :property-change
-   :ready-state-change
-   :reset
-   :resize
-   :responsive
-   :right-click
-   :scroll
-   :select
-   :select-start
-   :size-changed
-   :storage
-   :submit
-   :text
-   :text-input
-   :touch-cancel
-   :touch-end
-   :touch-move
-   :touch-start
-   :transitionend
-   :unload
-   :unresponsive
-   :visibility-change
-   :wheel])
-
-(defn keyword->event-string [k]
-  (-> (dehyphenate-keyword k)
-      (name)
-      (string/upper-case)))
-
-(defn dehyphenate-keyword [k]
-  (-> (name k)
-      (string/replace "-" "")
-      (keyword)))
-
-(def map-of-keyword->event-type
-  (into {} (for [k event-type-keywords
-                 :let [event-type (aget EventType (keyword->event-string k))]]
-             {k event-type
-              (dehyphenate-keyword k) event-type})))
+(defn get-event-type [k]
+  (aget EventType (-> (name k)
+                      (string/replace "-" "")
+                      (string/upper-case))))
 
 (defn listen!
   [src event-type func]
-  (events/listen src (get map-of-keyword->event-type event-type event-type) func))
+  (let [event-type (if (keyword? event-type) (get-event-type event-type) event-type)]
+    (events/listen src event-type func)))
 
 (defn listen-take!
   [channel func]
