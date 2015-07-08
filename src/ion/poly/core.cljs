@@ -3,6 +3,7 @@
   (:require
    [cljs.core :as cljs]
    [cljs.core.async :refer [<! >! chan close! put! sliding-buffer timeout]]
+   [clojure.string :as string]
    [goog]
    [goog.date.Date]
    [goog.date.DateTime]
@@ -11,8 +12,8 @@
    [goog.dom.classes :as classes]
    [goog.events :as events]
    [goog.string]
-   [goog.style])
-   [goog.userAgent]
+   [goog.style]
+   [goog.userAgent])
   (:import
    [goog.dom ViewportSizeMonitor]
    [goog.events EventType]
@@ -153,30 +154,185 @@
 ;; -----------------------------------------------------------------------------
 ;; Event Helpers
 
+(def event-type-keywords
+  [:animation-end
+   :animation-iteration
+   :animation-start
+   :before-copy
+   :before-cut
+   :before-paste
+   :before-unload
+   :blur
+   :change
+   :click
+   :composition-end
+   :composition-start
+   :composition-update
+   :connect
+   :console-message
+   :context-menu
+   :copy
+   :cut
+   :dbl-click
+   :deactivate
+   :dom-attr-modified
+   :dom-character-data-modified
+   :dom-content-loaded
+   :dom-node-inserted
+   :dom-node-inserted-into-document
+   :dom-node-removed
+   :dom-node-removed-from-document
+   :dom-subtree-modified
+   :drag
+   :drag-end
+   :drag-enter
+   :drag-leave
+   :drag-over
+   :drag-start
+   :drop
+   :error
+   :exit
+   :focus
+   :focus-in
+   :focus-out
+   :got-pointer-capture
+   :hash-change
+   :help
+   :input
+   :key-down
+   :key-press
+   :key-up
+   :load
+   :load-abort
+   :load-commit
+   :load-redirect
+   :load-start
+   :load-stop
+   :lose-capture
+   :lost-pointer-capture
+   :message
+   :mouse-down
+   :mouse-enter
+   :mouse-leave
+   :mouse-move
+   :mouse-out
+   :mouse-over
+   :mouse-up
+   :ms-gesture-change
+   :ms-gesture-end
+   :ms-gesture-hold
+   :ms-gesture-start
+   :ms-gesture-tap
+   :ms-got-pointer-capture
+   :ms-inertia-start
+   :ms-lost-pointer-capture
+   :ms-pointer-cancel
+   :ms-pointer-down
+   :ms-pointer-enter
+   :ms-pointer-hover
+   :ms-pointer-leave
+   :ms-pointer-move
+   :ms-pointer-out
+   :ms-pointer-over
+   :ms-pointer-up
+   :offline
+   :online
+   :orientation-change
+   :page-hide
+   :page-show
+   :paste
+   :pointer-cancel
+   :pointer-down
+   :pointer-enter
+   :pointer-leave
+   :pointer-move
+   :pointer-out
+   :pointer-over
+   :pointer-up
+   :pop-state
+   :property-change
+   :ready-state-change
+   :reset
+   :resize
+   :responsive
+   :right-click
+   :scroll
+   :select
+   :select-start
+   :size-changed
+   :storage
+   :submit
+   :text
+   :text-input
+   :touch-cancel
+   :touch-end
+   :touch-move
+   :touch-start
+   :transitionend
+   :unload
+   :unresponsive
+   :visibility-change
+   :wheel])
+
+(defn keyword->event-string [k]
+  (-> (dehyphenate-keyword k)
+      (name)
+      (string/upper-case)))
+
+(defn dehyphenate-keyword [k]
+  (-> (name k)
+      (string/replace "-" "")
+      (keyword)))
+
+(def map-of-keyword->event-type
+  (into {} (for [k event-type-keywords
+                 :let [event-type (aget EventType (keyword->event-string k))]]
+             {k event-type
+              (dehyphenate-keyword k) event-type})))
+
 (defn listen!
   [src event-type func]
-  (events/listen src event-type func))
+  (events/listen src (get map-of-keyword->event-type event-type event-type) func))
 
 (defn listen-take!
   [channel func]
   (go-loop []
-    (func (<! channel))
-    (recur)))
+    (when-let [taken (<! channel)]
+      (func taken)
+      (recur))))
 
 (defn listen-put!
   ([src event-type channel]
-   (events/listen src event-type #(put! channel %))
+   (listen! src event-type #(put! channel %))
    channel)
   ([src event-type channel subject]
-   (events/listen src event-type #(put! channel subject))
+   (listen! src event-type #(put! channel subject))
    channel))
 
 
 ;; -----------------------------------------------------------------------------
 ;; Mouse Events
 
+(def base-mouse-event-keywords
+  [:alt-key
+   :buttons
+   :client-x
+   :client-y])
+
 (defn extract-mouse-info [e]
-  {:x (.-clientX e) :y (.-clientY e)})
+  {:alt-key (.-altKey e)
+   :button (.-button e)
+;   :buttons (.-buttons e)
+   :client-x (.-clientX e)
+   :client-y (.-clientY e)
+   :ctrl-key (.-ctrlKey e)
+   :detail (.-detail e)
+   :event-phase (.-eventPhase e)
+   :meta-key (.-metaKey e)
+   :screen-x (.-screenX e)
+   :screen-y (.-screenY e)
+   :shift-key (.-shiftKey e)
+   })
 
 (defn get-mouse-channel
   ([]
@@ -184,17 +340,14 @@
   ([buffer]
    (chan buffer (map extract-mouse-info))))
 
-(defn listen-put-mouse-move! [channel]
-  (listen-put! js/window EventType.MOUSEMOVE channel))
+(defn listen-put-mouse-move! [src channel]
+  (listen-put! src :mouse-move channel))
 
 (defn channel-for-mouse-move!
-  ([]
-   (listen-put-mouse-move! (get-mouse-channel)))
-  ([buffer]
-   (listen-put-mouse-move! (get-mouse-channel buffer))))
-
-(defn listen-for-mouse-move! [func]
-  (listen! js/window EventType.MOUSEMOVE func))
+  ([src]
+   (listen-put-mouse-move! src (get-mouse-channel)))
+  ([src buffer]
+   (listen-put-mouse-move! src (get-mouse-channel buffer))))
 
 
 ;; -----------------------------------------------------------------------------
@@ -202,9 +355,10 @@
 
 (defn extract-viewport-size [monitor]
   (let [size (.getSize monitor)
-        w (. size -width)
-        h (. size -height)]
-    {:width w :height h}))
+        h (. size -height)
+        w (. size -width)]
+    {:height h
+     :width w}))
 
 (defn get-viewport-resize-channel
   ([]
@@ -214,7 +368,7 @@
 
 (defn listen-put-viewport-resize! [channel]
   (let [monitor (ViewportSizeMonitor.)]
-    (listen-put! monitor EventType.RESIZE channel monitor)))
+    (listen-put! monitor :resize channel monitor)))
 
 (defn channel-for-viewport-resize!
   ([]
@@ -224,13 +378,13 @@
 
 (defn listen-for-viewport-resize! [func]
   (let [monitor (ViewportSizeMonitor.)]
-    (listen! monitor EventType.RESIZE #(func (extract-viewport-size monitor)))))
+    (listen! monitor :resize #(func (extract-viewport-size monitor)))))
 
 
 ;; -----------------------------------------------------------------------------
 ;; Window Events
 
-(defn listen-for-window-load! [func]
-  (listen! js/window EventType.LOAD func))
+;; (defn listen-for-window-load! [func]
+;;   (listen! js/window :load func))
 
 
