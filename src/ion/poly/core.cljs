@@ -154,14 +154,14 @@
 ;; -----------------------------------------------------------------------------
 ;; Event Helpers
 
-(defn get-event-type [k]
+(defn keyword->event-type [k]
   (aget EventType (-> (name k)
                       (string/replace "-" "")
                       (string/upper-case))))
 
 (defn listen!
   [src event-type func]
-  (let [event-type (if (keyword? event-type) (get-event-type event-type) event-type)]
+  (let [event-type (if (keyword? event-type) (keyword->event-type event-type) event-type)]
     (events/listen src event-type func)))
 
 (defn listen-take!
