@@ -182,6 +182,11 @@
   (let [event-type (if (keyword? event-type) (k->event-type event-type) event-type)]
     (events/listen src event-type func)))
 
+(defn listen-once!
+  [src event-type func]
+  (let [event-type (if (keyword? event-type) (k->event-type event-type) event-type)]
+    (events/listenOnce src event-type func)))
+
 (defn listen-put!
   ([src event-type channel]
    (let [listener-key (listen! src event-type #(put! channel %))]
@@ -199,6 +204,34 @@
 
 (defn unlisten! [key]
   (events/unlistenByKey key))
+
+(def e-ks
+  #{:alt-key
+    :button
+    :buttons
+    :client-x
+    :client-y
+    :ctrl-key
+    :current-target
+    :default-prevented
+    :detail
+    :event-phase
+    :key-cde
+    :meta-key
+    :offset-x
+    :offset-y
+    :related-target
+    :screen-x
+    :screen-y
+    :shift-key
+    :state
+    :target
+    :type})
+
+;; goog.events.BrowserEvent.MouseButton = {
+;;   LEFT: 0,
+;;   MIDDLE: 1,
+;;   RIGHT: 2
 
 
 ;; -----------------------------------------------------------------------------
