@@ -184,11 +184,11 @@
 
 (defn listen-put!
   ([src event-type channel]
-   (listen! src event-type #(put! channel %))
-   channel)
+   (let [listener-key (listen! src event-type #(put! channel %))]
+     [channel listener-key]))
   ([src event-type channel subject]
-   (listen! src event-type #(put! channel subject))
-   channel))
+   (let [listener-key (listen! src event-type #(put! channel subject))]
+     [channel listener-key])))
 
 (defn listen-take!
   [channel func]
@@ -196,6 +196,9 @@
     (when-let [taken (<! channel)]
       (func taken)
       (recur))))
+
+(defn unlisten! [key]
+  (events/unlistenByKey key))
 
 
 ;; -----------------------------------------------------------------------------
