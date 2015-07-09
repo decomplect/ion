@@ -152,16 +152,31 @@
 
 
 ;; -----------------------------------------------------------------------------
+;; JavaScript Interop Helpers
+
+(defn- camel-case [head & more]
+  (cons head (map string/capitalize more)))
+
+(defn k->camel-case [k]
+  (->> (string/split (name k) "-") (apply camel-case) string/join))
+
+(defn k->obj-prop [o k]
+  (aget o (k->camel-case k)))
+
+(defn o->m [ks o]
+  "Returns a map containing the properties of an object based on a coll of keywords."
+  (into {} (for [k ks] {k (k->obj-prop o k)})))
+
+
+;; -----------------------------------------------------------------------------
 ;; Event Helpers
 
-(defn keyword->event-type [k]
-  (aget EventType (-> (name k)
-                      (string/replace "-" "")
-                      (string/upper-case))))
+(defn k->event-type [k]
+  (aget EventType (-> (name k) (string/replace "-" "") string/upper-case)))
 
 (defn listen!
   [src event-type func]
-  (let [event-type (if (keyword? event-type) (keyword->event-type event-type) event-type)]
+  (let [event-type (if (keyword? event-type) (k->event-type event-type) event-type)]
     (events/listen src event-type func)))
 
 (defn listen-put!
@@ -183,41 +198,41 @@
 ;; -----------------------------------------------------------------------------
 ;; Mouse Events
 
-(def base-mouse-event-keywords
-  [:alt-key
-   :buttons
-   :client-x
-   :client-y])
+(def e-ks-mouse
+  #{:alt-key
+    :button
+    :buttons
+    :client-x
+    :client-y
+    :ctrl-key
+    :detail
+    :event-phase
+    :meta-key
+    :screen-x
+    :screen-y
+    :shift-key})
 
-(defn extract-mouse-info [e]
-  {:alt-key (.-altKey e)
-   :button (.-button e)
-;   :buttons (.-buttons e)
-   :client-x (.-clientX e)
-   :client-y (.-clientY e)
-   :ctrl-key (.-ctrlKey e)
-   :detail (.-detail e)
-   :event-phase (.-eventPhase e)
-   :meta-key (.-metaKey e)
-   :screen-x (.-screenX e)
-   :screen-y (.-screenY e)
-   :shift-key (.-shiftKey e)
-   })
+(def e-ks-not-mouse-move
+  #{:buttons})
+
+(def e-ks-mouse-move (disj e-ks-mouse e-ks-not-mouse-move))
+
+(def e-mouse-move->m (partial o->m e-ks-mouse-move))
 
 (defn get-mouse-channel
-  ([]
-   (get-mouse-channel (sliding-buffer 1)))
-  ([buffer]
-   (chan buffer (map extract-mouse-info))))
+  ([xform]
+   (get-mouse-channel xform (sliding-buffer 1)))
+  ([xform buffer]
+   (chan buffer xform)))
 
 (defn listen-put-mouse-move! [src channel]
   (listen-put! src :mouse-move channel))
 
 (defn channel-for-mouse-move!
   ([src]
-   (listen-put-mouse-move! src (get-mouse-channel)))
+   (listen-put-mouse-move! src (get-mouse-channel (map e-mouse-move->m))))
   ([src buffer]
-   (listen-put-mouse-move! src (get-mouse-channel buffer))))
+   (listen-put-mouse-move! src (get-mouse-channel (map e-mouse-move->m) buffer))))
 
 
 ;; -----------------------------------------------------------------------------
