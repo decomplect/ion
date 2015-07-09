@@ -219,37 +219,26 @@
 
 (def e-mouse-move->m (partial o->m e-ks-mouse-move))
 
-(defn get-mouse-channel
-  ([xform]
-   (get-mouse-channel xform (sliding-buffer 1)))
-  ([xform buffer]
-   (chan buffer xform)))
-
-(defn listen-put-mouse-move! [src channel]
-  (listen-put! src :mouse-move channel))
-
 (defn channel-for-mouse-move!
   ([src]
-   (listen-put-mouse-move! src (get-mouse-channel (map e-mouse-move->m))))
+   (channel-for-mouse-move! src (sliding-buffer 1)))
   ([src buffer]
-   (listen-put-mouse-move! src (get-mouse-channel (map e-mouse-move->m) buffer))))
+   (listen-put! src :mouse-move (chan buffer (map e-mouse-move->m)))))
 
 
 ;; -----------------------------------------------------------------------------
 ;; Viewport Resize Event
 
-(defn extract-viewport-size [monitor]
+(defn viewport-size-monitor->m [monitor]
   (let [size (.getSize monitor)
         h (. size -height)
         w (. size -width)]
     {:height h
      :width w}))
 
-(defn get-viewport-resize-channel
-  ([]
-   (get-viewport-resize-channel (sliding-buffer 1)))
-  ([buffer]
-   (chan buffer (map extract-viewport-size))))
+(defn listen-for-viewport-resize! [func]
+  (let [monitor (ViewportSizeMonitor.)]
+    (listen! monitor :resize #(func (viewport-size-monitor->m monitor)))))
 
 (defn listen-put-viewport-resize! [channel]
   (let [monitor (ViewportSizeMonitor.)]
@@ -257,13 +246,9 @@
 
 (defn channel-for-viewport-resize!
   ([]
-   (listen-put-viewport-resize! (get-viewport-resize-channel)))
+   (channel-for-viewport-resize! (sliding-buffer 1)))
   ([buffer]
-   (listen-put-viewport-resize! (get-viewport-resize-channel buffer))))
-
-(defn listen-for-viewport-resize! [func]
-  (let [monitor (ViewportSizeMonitor.)]
-    (listen! monitor :resize #(func (extract-viewport-size monitor)))))
+   (listen-put-viewport-resize! (chan buffer (map viewport-size-monitor->m)))))
 
 
 ;; -----------------------------------------------------------------------------
