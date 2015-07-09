@@ -157,15 +157,18 @@
 (defn- camel-case [head & more]
   (cons head (map string/capitalize more)))
 
-(defn k->camel-case [k]
+(defn k->camel-case-name [k]
+  "Return a camelCase string version of a possibly hyphenated keyword."
   (->> (string/split (name k) "-") (apply camel-case) string/join))
 
-(defn k->obj-prop [o k]
-  (aget o (k->camel-case k)))
+(defn ks->obj-prop-m [ks]
+  "Return an object property map for a coll of keywords."
+  (into {} (for [k ks] {k (k->camel-case-name k)})))
 
-(defn o->m [ks o]
-  "Returns a map containing the properties of an object based on a coll of keywords."
-  (into {} (for [k ks] {k (k->obj-prop o k)})))
+(defn o->m [m o]
+  "Return a map containing the properties of an object based on an object
+  property map."
+  (into {} (for [k (keys m)] {k (aget o (k m))})))
 
 
 ;; -----------------------------------------------------------------------------
@@ -217,7 +220,7 @@
 
 (def e-ks-mouse-move (disj e-ks-mouse e-ks-not-mouse-move))
 
-(def e-mouse-move->m (partial o->m e-ks-mouse-move))
+(def e-mouse-move->m (partial o->m (ks->obj-prop-m e-ks-mouse-move)))
 
 (defn channel-for-mouse-move!
   ([src]
