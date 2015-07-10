@@ -174,6 +174,48 @@
 ;; -----------------------------------------------------------------------------
 ;; Event Helpers
 
+(def event-ks
+  #{:alt-key
+    :button
+    :buttons
+    :client-x
+    :client-y
+    :ctrl-key
+    :current-target
+    :default-prevented
+    :detail
+    :event-phase
+    :key-cde
+    :meta-key
+    :offset-x
+    :offset-y
+    :related-target
+    :screen-x
+    :screen-y
+    :shift-key
+    :state
+    :target
+    :type})
+
+;; goog.events.BrowserEvent.MouseButton = {
+;;   LEFT: 0,
+;;   MIDDLE: 1,
+;;   RIGHT: 2
+
+(def e->m (partial o->m (ks->obj-prop-m event-ks)))
+
+(defn e->m-plus []
+  (let [counter (atom 0)]
+    (fn [e]
+      (let [m (e->m e)]
+        (assoc m ::count (swap! counter inc))))))
+
+(defn e-chan
+  ([]
+   (e-chan (sliding-buffer 1)))
+  ([buffer]
+   (chan buffer (map (e->m-plus)))))
+
 (defn k->event-type [k]
   (aget EventType (-> (name k) (string/replace "-" "") string/upper-case)))
 
@@ -205,37 +247,11 @@
 (defn unlisten! [key]
   (events/unlistenByKey key))
 
-(def e-ks
-  #{:alt-key
-    :button
-    :buttons
-    :client-x
-    :client-y
-    :ctrl-key
-    :current-target
-    :default-prevented
-    :detail
-    :event-phase
-    :key-cde
-    :meta-key
-    :offset-x
-    :offset-y
-    :related-target
-    :screen-x
-    :screen-y
-    :shift-key
-    :state
-    :target
-    :type})
-
-;; goog.events.BrowserEvent.MouseButton = {
-;;   LEFT: 0,
-;;   MIDDLE: 1,
-;;   RIGHT: 2
-
 
 ;; -----------------------------------------------------------------------------
 ;; Mouse Events
+
+(def e-mouse->m (partial o->m (ks->obj-prop-m event-ks)))
 
 (def e-ks-mouse
   #{:alt-key
@@ -256,7 +272,9 @@
 
 (def e-ks-mouse-move (disj e-ks-mouse e-ks-not-mouse-move))
 
-(def e-mouse-move->m (partial o->m (ks->obj-prop-m e-ks-mouse-move)))
+;(def e-mouse-move->m (partial o->m (ks->obj-prop-m e-ks-mouse-move)))
+
+(def e-mouse-move->m (partial o->m (ks->obj-prop-m event-ks)))
 
 (defn channel-for-mouse-move!
   ([src]
