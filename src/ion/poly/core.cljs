@@ -216,7 +216,16 @@
 
 (def listen-once! (partial listen-base! events/listenOnce))
 
+(declare e-chan keyboard-e-chan mouse-e-chan)
+
+(defn e-type->chan [e-type]
+  (condp contains? (event-type e-type)
+    #{"key"} (keyboard-e-chan)
+    #{"mousedown" "mousemove" "mouseup"} (mouse-e-chan)))
+
 (defn listen-put!
+  ([src e-type]
+   (listen-put! src e-type (e-type->chan e-type)))
   ([src e-type channel]
    (let [listener-key (listen! src e-type #(put! channel %))]
      [listener-key channel]))
