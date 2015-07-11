@@ -16,7 +16,7 @@
    [goog.userAgent])
   (:import
    [goog.dom ViewportSizeMonitor]
-   [goog.events EventType]
+   [goog.events EventType KeyHandler]
    [goog Timer]))
 
 (enable-console-print!)
@@ -172,7 +172,65 @@
 
 
 ;; -----------------------------------------------------------------------------
+;; Async Helpers
+
+;; (defn foldp! [func init in]
+;;   (let [out (chan)]
+;;     (put! out init)
+;;     (go-loop [m init
+;;               v (<! in)]
+;;       (let [m2 (func m v)]
+;;         (put! out m2)
+;;         (recur m2 (<! in))))
+;;     out))
+
+(defn take-back!
+  [channel func]
+  (go-loop []
+    (when-let [taken (<! channel)]
+      (func taken)
+      (recur))))
+
+
+;; -----------------------------------------------------------------------------
 ;; Event Helpers
+
+(defn event-type [e-type]
+  "Returns a normalized form of the event type string, keyword, or symbol."
+  (aget EventType (-> (name e-type) (string/replace "-" "") string/upper-case)))
+
+(defn listen!
+  [src e-type func]
+  (events/listen src (event-type e-type) func))
+
+(defn listen-once!
+  [src e-type func]
+  (events/listenOnce src (event-type e-type) func))
+
+(defn listen-put!
+  ([src e-type channel]
+   (let [listener-key (listen! src e-type #(put! channel %))]
+     [listener-key channel]))
+  ([src e-type channel subject]
+   (let [listener-key (listen! src e-type #(put! channel subject))]
+     [listener-key channel])))
+
+(defn unlisten!
+  ([listener-key]
+   (events/unlistenByKey listener-key))
+  ([listener-key channel]
+   (events/unlistenByKey listener-key)
+   (close! channel)))
+
+(defn e-plus [mapper]
+  (let [counter (atom 0)]
+    (fn [e]
+      (let [m (mapper e)]
+        (assoc m ::count (swap! counter inc))))))
+
+
+;; -----------------------------------------------------------------------------
+;; Browser Event (Generic event that's more of a base pattern than anything useful)
 
 (def event-ks
   #{:alt-key
@@ -197,90 +255,75 @@
     :target
     :type})
 
-;; goog.events.BrowserEvent.MouseButton = {
-;;   LEFT: 0,
-;;   MIDDLE: 1,
-;;   RIGHT: 2
-
 (def e->m (partial o->m (ks->obj-prop-m event-ks)))
-
-(defn e->m-plus []
-  (let [counter (atom 0)]
-    (fn [e]
-      (let [m (e->m e)]
-        (assoc m ::count (swap! counter inc))))))
 
 (defn e-chan
   ([]
    (e-chan (sliding-buffer 1)))
   ([buffer]
-   (chan buffer (map (e->m-plus)))))
+   (chan buffer (map (e-plus e->m)))))
 
-(defn k->event-type [k]
-  (aget EventType (-> (name k) (string/replace "-" "") string/upper-case)))
 
-(defn listen!
-  [src event-type func]
-  (let [event-type (if (keyword? event-type) (k->event-type event-type) event-type)]
-    (events/listen src event-type func)))
+;; -----------------------------------------------------------------------------
+;; Keyboard Events (:key-down :key-press :key-up)
 
-(defn listen-once!
-  [src event-type func]
-  (let [event-type (if (keyword? event-type) (k->event-type event-type) event-type)]
-    (events/listenOnce src event-type func)))
+(def keyboard-event-ks
+  #{:alt-key
+    :char-code
+    :ctrl-key
+    :current-target
+    :default-prevented
+    :is-composing
+    :key-code
+    :meta-key
+    :related-target
+    :repeat
+    :shift-key
+    :target
+    :type})
 
-(defn listen-put!
-  ([src event-type channel]
-   (let [listener-key (listen! src event-type #(put! channel %))]
-     [channel listener-key]))
-  ([src event-type channel subject]
-   (let [listener-key (listen! src event-type #(put! channel subject))]
-     [channel listener-key])))
+(def keyboard-e->m (partial o->m (ks->obj-prop-m keyboard-event-ks)))
 
-(defn listen-take!
-  [channel func]
-  (go-loop []
-    (when-let [taken (<! channel)]
-      (func taken)
-      (recur))))
-
-(defn unlisten! [key]
-  (events/unlistenByKey key))
+(defn keyboard-e-chan
+  ([]
+   (keyboard-e-chan (sliding-buffer 1)))
+  ([buffer]
+   (chan buffer (map (e-plus keyboard-e->m)))))
 
 
 ;; -----------------------------------------------------------------------------
 ;; Mouse Events
 
-(def e-mouse->m (partial o->m (ks->obj-prop-m event-ks)))
-
-(def e-ks-mouse
+(def mouse-event-ks
   #{:alt-key
     :button
     :buttons
     :client-x
     :client-y
     :ctrl-key
+    :current-target
+    :default-prevented
     :detail
-    :event-phase
+;    :event-phase
+;    :key-cde
     :meta-key
+    :offset-x
+    :offset-y
+    :related-target
     :screen-x
     :screen-y
-    :shift-key})
+    :shift-key
+;    :state
+    :target
+    :type})
 
-(def e-ks-not-mouse-move
-  #{:buttons})
+(def mouse-e->m (partial o->m (ks->obj-prop-m mouse-event-ks)))
 
-(def e-ks-mouse-move (disj e-ks-mouse e-ks-not-mouse-move))
-
-;(def e-mouse-move->m (partial o->m (ks->obj-prop-m e-ks-mouse-move)))
-
-(def e-mouse-move->m (partial o->m (ks->obj-prop-m event-ks)))
-
-(defn channel-for-mouse-move!
-  ([src]
-   (channel-for-mouse-move! src (sliding-buffer 1)))
-  ([src buffer]
-   (listen-put! src :mouse-move (chan buffer (map e-mouse-move->m)))))
+(defn mouse-e-chan
+  ([]
+   (mouse-e-chan (sliding-buffer 1)))
+  ([buffer]
+   (chan buffer (map (e-plus mouse-e->m)))))
 
 
 ;; -----------------------------------------------------------------------------
