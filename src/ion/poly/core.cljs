@@ -197,15 +197,24 @@
 
 (defn event-type [e-type]
   "Returns a normalized form of the event type string, keyword, or symbol."
-  (aget EventType (-> (name e-type) (string/replace "-" "") string/upper-case)))
+  (let [e-type (-> (name e-type) (string/replace "-" "") string/upper-case)]
+    (or (aget EventType e-type) (string/lower-case e-type))))
 
-(defn listen!
-  [src e-type func]
-  (events/listen src (event-type e-type) func))
+(defn event-source [src e-type]
+  "Returns a wrapped-if-necessary event source."
+  (let [e-type (event-type e-type)]
+    (if (= "key" e-type)
+      (KeyHandler. src)
+      src)))
 
-(defn listen-once!
-  [src e-type func]
-  (events/listenOnce src (event-type e-type) func))
+(defn- listen-base!
+  [func src e-type callback]
+  (let [e-type (event-type e-type)]
+    (func (event-source src e-type) e-type callback)))
+
+(def listen! (partial listen-base! events/listen))
+
+(def listen-once! (partial listen-base! events/listenOnce))
 
 (defn listen-put!
   ([src e-type channel]
