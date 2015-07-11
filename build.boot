@@ -28,7 +28,10 @@
   (let [version "0.1.0-SNAPSHOT"]
     (bootlaces! version)
     (set-env!
-     :dependencies '[[org.clojure/core.async "0.1.346.0-17112a-alpha"]]
+     :dependencies '[[org.clojure/core.async "0.1.346.0-17112a-alpha"]
+                     [spellhouse/phalanges "0.1.6"
+                        :exclusions [com.cemerick/austin
+                                     org.clojure/clojure]]]
      :resource-paths #{"src/ion/poly"})
     (task-options!
      pom {:project 'ion/poly

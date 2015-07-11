@@ -13,7 +13,8 @@
    [goog.events :as events]
    [goog.string]
    [goog.style]
-   [goog.userAgent])
+   [goog.userAgent]
+   [phalanges.core :as phalanges])
   (:import
    [goog.dom ViewportSizeMonitor]
    [goog.events EventType KeyHandler]
@@ -302,11 +303,14 @@
 
 (def keyboard-e->m (partial o->m (ks->obj-prop-m keyboard-event-ks)))
 
+(defn keyboard-plus [m]
+  (assoc m ::keyword (phalanges/keycode->keyword (:key-code m))))
+
 (defn keyboard-e-chan
   ([]
    (keyboard-e-chan (sliding-buffer 1)))
   ([buffer]
-   (chan buffer (map (e-plus keyboard-e->m)))))
+   (chan buffer (map (comp keyboard-plus (e-plus keyboard-e->m))))))
 
 
 ;; -----------------------------------------------------------------------------
