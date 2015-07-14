@@ -118,25 +118,6 @@
   ([tag-name class-name]
    (dom/getElementsByTagNameAndClass (name tag-name) (name class-name))))
 
-(def request-animation-frame
-  (or
-   (.-requestAnimationFrame js/window)
-   (.-webkitRequestAnimationFrame js/window)
-   (.-mozRequestAnimationFrame js/window)
-   (.-msRequestAnimationFrame js/window)
-   (.-oRequestAnimationFrame js/window)
-   (let [t0 (.getTime (js/Date.))]
-     (fn [f]
-       (js/setTimeout
-        #(f (- (.getTime (js/Date.)) t0))
-        16.66666)))))
-
-;; (defn set-stylesheet! [stylesheet]
-;;   (let [el (.createElement js/document "style")
-;;         node (.createTextNode js/document stylesheet)]
-;;     (.appendChild el node)
-;;     (.appendChild (.-head js/document) el)))
-
 (defn set-title! [title]
   (set! (.-title js/document) title))
 
@@ -147,9 +128,15 @@
 (defn install-styles! [styles]
   (goog.style/installStyles styles))
 
-(defn get-page-offset [element]
-  (let [coord (goog.style/getPageOffset element)]
-    {:x (.-x coord) :y (.-y coord)}))
+;; (defn set-stylesheet! [stylesheet]
+;;   (let [el (.createElement js/document "style")
+;;         node (.createTextNode js/document stylesheet)]
+;;     (.appendChild el node)
+;;     (.appendChild (.-head js/document) el)))
+
+;; (defn get-page-offset [element]
+;;   (let [coord (goog.style/getPageOffset element)]
+;;     {:x (.-x coord) :y (.-y coord)}))
 
 
 ;; -----------------------------------------------------------------------------
@@ -174,6 +161,50 @@
 
 ;; -----------------------------------------------------------------------------
 ;; Async Helpers
+
+;; (defn rAF
+;;   "Calls passed in function inside a requestAnimationFrame, falls back to timeouts for
+;;    browers without requestAnimationFrame"
+;;   [f]
+;;   (.start (goog.async.AnimationDelay. f)))
+
+;; (def schedule
+;;   (and (exists? js/window)
+;;        (or js/window.requestAnimationFrame
+;;            js/window.webkitRequestAnimationFrame
+;;            js/window.mozRequestAnimationFrame
+;;            js/window.msRequestAnimationFrame
+;;            #(js/setTimeout % 16))))
+
+;; (defn request-animation-frame! [f]
+;;   (let [c (chan)
+;;         animation-delay (AnimationDelay. #(put! c %))]
+;;     (go
+;;       (while true
+;;         (.start animation-delay)
+;;         (<! c)
+;;         (f)))))
+
+;; (def request-animation-frame
+;;   (or
+;;    (.-requestAnimationFrame js/window)
+;;    (.-webkitRequestAnimationFrame js/window)
+;;    (.-mozRequestAnimationFrame js/window)
+;;    (.-msRequestAnimationFrame js/window)
+;;    (.-oRequestAnimationFrame js/window)
+;;    (let [t0 (.getTime (js/Date.))]
+;;      (fn [f]
+;;        (js/setTimeout
+;;         #(f (- (.getTime (js/Date.)) t0))
+;;         16.66666)))))
+
+;; (def animation-frame
+;;   (or (.-requestAnimationFrame js/window)
+;;       (.-webkitRequestAnimationFrame js/window)
+;;       (.-mozRequestAnimationFrame js/window)
+;;       (.-oRequestAnimationFrame js/window)
+;;       (.-msRequestAnimationFrame js/window)
+;;       (fn [callback] (js/setTimeout callback 17))))
 
 ;; (defn foldp! [func init in]
 ;;   (let [out (chan)]
@@ -222,7 +253,7 @@
 (defn e-type->chan [e-type]
   (condp contains? (event-type e-type)
     #{"key"} (keyboard-e-chan)
-    #{"mousedown" "mousemove" "mouseup"} (mouse-e-chan)))
+    #{"mouseclick" "mousedown" "mousemove" "mouseup"} (mouse-e-chan)))
 
 (defn listen-put!
   ([src e-type]
@@ -284,7 +315,7 @@
 
 
 ;; -----------------------------------------------------------------------------
-;; Keyboard Events (:key-down :key-press :key-up)
+;; Keyboard Events (:key :key-down :key-press :key-up)
 
 (def keyboard-event-ks
   #{:alt-key
