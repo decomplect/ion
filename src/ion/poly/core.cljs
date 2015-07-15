@@ -191,7 +191,7 @@
               (if-not @starting-point (reset! starting-point timestamp))
               (let [elapsed (- timestamp @starting-point)
                     f-count (swap! frame-count inc)]
-                (if (>= elapsed interval)
+                (if (> elapsed interval)
                   (do
                     (reset! fps (->> (/ f-count elapsed) (* 1000) (.round js/Math)))
                     (reset! frame-count 0)
