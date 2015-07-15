@@ -5,12 +5,14 @@
    [cljs.core.async :refer [<! >! chan close! put! sliding-buffer timeout]]
    [clojure.string :as string]
    [goog]
+   [goog.async.AnimationDelay]
    [goog.date.Date]
    [goog.date.DateTime]
    [goog.date.UtcDateTime]
    [goog.dom :as dom]
    [goog.dom.classes :as classes]
    [goog.events :as events]
+   [goog.object]
    [goog.string]
    [goog.style]
    [goog.userAgent]
@@ -101,10 +103,10 @@
   (.-y (dom/getDocumentScroll)))
 
 (defn get-root []
-  (aget (dom/getElementsByTagNameAndClass "html") 0))
+  (goog.object/get (dom/getElementsByTagNameAndClass "html") 0))
 
 (defn get-body []
-  (aget (dom/getElementsByTagNameAndClass "body") 0))
+  (goog.object/get (dom/getElementsByTagNameAndClass "body") 0))
 
 (defn get-document []
   (dom/getDocument))
@@ -156,55 +158,46 @@
 (defn o->m [m o]
   "Return a map containing the properties of an object based on an object
   property map."
-  (into {} (for [k (keys m)] {k (aget o (k m))})))
+  (into {} (for [k (keys m)] {k (goog.object/get o (k m))})))
 
 
 ;; -----------------------------------------------------------------------------
 ;; Async Helpers
 
-;; (defn rAF
-;;   "Calls passed in function inside a requestAnimationFrame, falls back to timeouts for
-;;    browers without requestAnimationFrame"
-;;   [f]
-;;   (.start (goog.async.AnimationDelay. f)))
+(defn take-back!
+  "A delayed callback that pegs to the next message on the channel."
+  [channel callback]
+  (go-loop []
+    (when-let [taken (<! channel)]
+      (callback taken)
+      (recur))))
 
-;; (def schedule
-;;   (and (exists? js/window)
-;;        (or js/window.requestAnimationFrame
-;;            js/window.webkitRequestAnimationFrame
-;;            js/window.mozRequestAnimationFrame
-;;            js/window.msRequestAnimationFrame
-;;            #(js/setTimeout % 16))))
+(defn request-animation-frame
+  "A delayed callback that pegs to the next animation frame."
+  [callback]
+  (.start (goog.async.AnimationDelay. callback)))
 
-;; (defn request-animation-frame! [f]
-;;   (let [c (chan)
-;;         animation-delay (AnimationDelay. #(put! c %))]
-;;     (go
-;;       (while true
-;;         (.start animation-delay)
-;;         (<! c)
-;;         (f)))))
-
-;; (def request-animation-frame
-;;   (or
-;;    (.-requestAnimationFrame js/window)
-;;    (.-webkitRequestAnimationFrame js/window)
-;;    (.-mozRequestAnimationFrame js/window)
-;;    (.-msRequestAnimationFrame js/window)
-;;    (.-oRequestAnimationFrame js/window)
-;;    (let [t0 (.getTime (js/Date.))]
-;;      (fn [f]
-;;        (js/setTimeout
-;;         #(f (- (.getTime (js/Date.)) t0))
-;;         16.66666)))))
-
-;; (def animation-frame
-;;   (or (.-requestAnimationFrame js/window)
-;;       (.-webkitRequestAnimationFrame js/window)
-;;       (.-mozRequestAnimationFrame js/window)
-;;       (.-oRequestAnimationFrame js/window)
-;;       (.-msRequestAnimationFrame js/window)
-;;       (fn [callback] (js/setTimeout callback 17))))
+(defn measure-fps
+  "Returns an atom containing the frames-per-second measured at regular intervals."
+  ([]
+   (measure-fps 500)) ; Measure every half-second
+  ([interval]
+   (let [fps (atom 0)
+         frame-count (atom 0)
+         starting-point (atom nil)]
+     (letfn [(callback
+              [timestamp]
+              (request-animation-frame callback)
+              (if-not @starting-point (reset! starting-point timestamp))
+              (let [elapsed (- timestamp @starting-point)
+                    f-count (swap! frame-count inc)]
+                (if (>= elapsed interval)
+                  (do
+                    (reset! fps (->> (/ f-count elapsed) (* 1000) (.round js/Math)))
+                    (reset! frame-count 0)
+                    (reset! starting-point timestamp)))))]
+       (request-animation-frame callback))
+     fps)))
 
 ;; (defn foldp! [func init in]
 ;;   (let [out (chan)]
@@ -216,13 +209,6 @@
 ;;         (recur m2 (<! in))))
 ;;     out))
 
-(defn take-back!
-  [channel func]
-  (go-loop []
-    (when-let [taken (<! channel)]
-      (func taken)
-      (recur))))
-
 
 ;; -----------------------------------------------------------------------------
 ;; Event Helpers
@@ -230,7 +216,7 @@
 (defn event-type [e-type]
   "Returns a normalized form of the event type string, keyword, or symbol."
   (let [e-type (-> (name e-type) (string/replace "-" "") string/upper-case)]
-    (or (aget EventType e-type) (string/lower-case e-type))))
+    (or (goog.object/get EventType e-type) (string/lower-case e-type))))
 
 (defn event-source [src e-type]
   "Returns a wrapped-if-necessary event source."
@@ -274,9 +260,17 @@
 
 (defn e-plus [mapper]
   (let [counter (atom 0)]
-    (fn [e]
-      (let [m (mapper e)]
+    (fn [event]
+      (let [m (mapper event)]
         (assoc m ::count (swap! counter inc))))))
+
+(defn prevent-default
+  [event]
+  (.preventDefault event))
+
+(defn stop-propagation
+  [event]
+  (.stopPropagation event))
 
 
 ;; -----------------------------------------------------------------------------
