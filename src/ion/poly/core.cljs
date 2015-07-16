@@ -195,8 +195,7 @@
                     (callback fps)
                     (reset! frame-count 0)
                     (reset! starting-point timestamp)))))]
-       (request-animation-frame measure-fps))
-     fps)))
+       (request-animation-frame measure-fps)))))
 
 ;; (defn foldp! [func init in]
 ;;   (let [out (chan)]
@@ -261,7 +260,7 @@
   (let [counter (atom 0)]
     (fn [event]
       (let [m (mapper event)]
-        (assoc m ::count (swap! counter inc))))))
+        (assoc m :poly/count (swap! counter inc))))))
 
 (defn prevent-default
   [event]
@@ -328,7 +327,7 @@
 (def keyboard-e->m (partial o->m (ks->obj-prop-m keyboard-event-ks)))
 
 (defn keyboard-plus [m]
-  (assoc m ::keyword (phalanges/keycode->keyword (:key-code m))))
+  (assoc m :poly/keyword (phalanges/keycode->keyword (:key-code m))))
 
 (defn keyboard-e-chan
   ([]
