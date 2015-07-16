@@ -178,23 +178,25 @@
   (.start (goog.async.AnimationDelay. callback)))
 
 (defn listen-fps!
-  "Repeated callback containing the frames-per-second measured at regular intervals."
+  "Repeated callback returning the frames-per-second measured at regular intervals."
   ([callback]
    (listen-fps! callback 500)) ; Measure every half-second
   ([callback interval]
    (let [frame-count (atom 0)
-         starting-point (atom nil)]
+         starting-point (atom nil)
+         repeating (atom true)]
      (letfn [(measure-fps
               [timestamp]
-              (request-animation-frame measure-fps)
-              (if-not @starting-point (reset! starting-point timestamp))
-              (let [elapsed (- timestamp @starting-point)
-                    f-count (swap! frame-count inc)]
-                (if (> elapsed interval)
-                  (let [fps (->> (/ f-count elapsed) (* 1000) (.round js/Math))]
-                    (callback fps)
-                    (reset! frame-count 0)
-                    (reset! starting-point timestamp)))))]
+              (when repeating
+                (request-animation-frame measure-fps)
+                (if-not @starting-point (reset! starting-point timestamp))
+                (let [elapsed (- timestamp @starting-point)
+                      f-count (swap! frame-count inc)]
+                  (if (> elapsed interval)
+                    (let [fps (->> (/ f-count elapsed) (* 1000) (.round js/Math))]
+                      (reset! frame-count 0)
+                      (reset! starting-point timestamp)
+                      (if-not (callback fps) (reset! repeating false)))))))]
        (request-animation-frame measure-fps)))))
 
 ;; (defn foldp! [func init in]
