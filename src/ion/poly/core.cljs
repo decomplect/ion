@@ -177,6 +177,16 @@
   [callback]
   (.start (goog.async.AnimationDelay. callback)))
 
+(defn listen-animation-frame!
+  [callback]
+  (let [running (atom true)]
+    (letfn [(step
+             [timestamp]
+             (when running
+               (request-animation-frame step)
+               (if-not (callback timestamp) (reset! running false))))]
+      (request-animation-frame step))))
+
 (defn listen-fps!
   "Repeated callback returning the frames-per-second measured at regular intervals."
   ([callback]
