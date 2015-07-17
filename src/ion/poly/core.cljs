@@ -182,7 +182,7 @@
   (let [running (atom true)]
     (letfn [(step
              [timestamp]
-             (when running
+             (when @running
                (request-animation-frame step)
                (if-not (callback timestamp) (reset! running false))))]
       (request-animation-frame step))))
@@ -197,7 +197,7 @@
          repeating (atom true)]
      (letfn [(measure-fps
               [timestamp]
-              (when repeating
+              (when @repeating
                 (request-animation-frame measure-fps)
                 (if-not @starting-point (reset! starting-point timestamp))
                 (let [elapsed (- timestamp @starting-point)
