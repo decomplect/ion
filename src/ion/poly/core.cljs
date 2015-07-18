@@ -4,7 +4,6 @@
    [cljs.core :as cljs]
    [cljs.core.async :refer [<! >! chan close! put! sliding-buffer timeout]]
    [clojure.string :as string]
-   [goog]
    [goog.async.AnimationDelay]
    [goog.async.nextTick]
    [goog.date.Date]
