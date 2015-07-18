@@ -42,7 +42,8 @@
 
 
 ;; -----------------------------------------------------------------------------
-;; String Helpers
+;; String Helpers - For additional functionality use the cuerdas library:
+;;                  https://github.com/funcool/cuerdas
 
 (defn html-escape
   ([s]
@@ -58,8 +59,8 @@
 
 
 ;; -----------------------------------------------------------------------------
-;; Date and Time (For additional functionality use the cljs-time library:
-;;                https://github.com/andrewmcveigh/cljs-time)
+;; Date and Time - For additional functionality use the cljs-time library:
+;;                 https://github.com/andrewmcveigh/cljs-time
 
 (defn js-now [] (js/Date.))
 
