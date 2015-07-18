@@ -6,6 +6,7 @@
    [clojure.string :as string]
    [goog]
    [goog.async.AnimationDelay]
+   [goog.async.nextTick]
    [goog.date.Date]
    [goog.date.DateTime]
    [goog.date.UtcDateTime]
@@ -164,50 +165,60 @@
 ;; -----------------------------------------------------------------------------
 ;; Async Helpers
 
-(defn take-back!
-  "A delayed callback that pegs to the next message on the channel."
-  [channel callback]
-  (go-loop []
-    (when-let [taken (<! channel)]
-      (callback taken)
-      (recur))))
+(defn next-tick!
+  [callback]
+  (goog.async.nextTick callback))
 
-(defn request-animation-frame
+(defn request-animation-frame!
   "A delayed callback that pegs to the next animation frame."
   [callback]
   (.start (goog.async.AnimationDelay. callback)))
 
 (defn listen-animation-frame!
   [callback]
-  (let [running (atom true)]
-    (letfn [(step
-             [timestamp]
-             (when @running
-               (request-animation-frame step)
-               (if-not (callback timestamp) (reset! running false))))]
-      (request-animation-frame step))))
+  (letfn [(step
+           [timestamp]
+           (if (callback timestamp) (request-animation-frame! step)))]
+    (request-animation-frame! step)))
 
 (defn listen-fps!
-  "Repeated callback returning the frames-per-second measured at regular intervals."
+  "Executes callback at every frame returning the frames-per-second."
   ([callback]
-   (listen-fps! callback 500)) ; Measure every half-second
+   (request-animation-frame! (listen-fps! callback nil)))
+  ([callback previous]
+   (letfn [(step
+            [timestamp]
+            (let [previous (or previous (- timestamp 17))
+                  elapsed (- timestamp previous)
+                  fps (->> (/ elapsed 1000) (/ 1) (.floor js/Math))]
+              (if (callback fps)
+                (request-animation-frame! (listen-fps! callback timestamp)))))]
+     step)))
+
+(defn listen-fps-interval!
+  "Executes callback at regular intervals returning the frames-per-second."
+  ([callback]
+   (listen-fps-interval! callback 500)) ; Measure every half-second
   ([callback interval]
-   (let [frame-count (atom 0)
-         starting-point (atom nil)
-         repeating (atom true)]
-     (letfn [(measure-fps
-              [timestamp]
-              (when @repeating
-                (request-animation-frame measure-fps)
-                (if-not @starting-point (reset! starting-point timestamp))
-                (let [elapsed (- timestamp @starting-point)
-                      f-count (swap! frame-count inc)]
-                  (if (> elapsed interval)
-                    (let [fps (->> (/ f-count elapsed) (* 1000) (.round js/Math))]
-                      (reset! frame-count 0)
-                      (reset! starting-point timestamp)
-                      (if-not (callback fps) (reset! repeating false)))))))]
-       (request-animation-frame measure-fps)))))
+   (request-animation-frame! (listen-fps-interval! callback interval nil 1)))
+  ([callback interval start-time frame-count]
+   (letfn [(step
+            [timestamp]
+            (let [start-time (or start-time (- timestamp 17))
+                  elapsed (- timestamp start-time)]
+              (if (< elapsed interval)
+                (request-animation-frame!
+                 (listen-fps-interval! callback interval start-time (inc frame-count)))
+                (let [fps (->> (/ frame-count elapsed) (* 1000) (.floor js/Math))]
+                  (if (callback fps)
+                    (request-animation-frame!
+                     (listen-fps-interval! callback interval timestamp 1)))))))]
+     step)))
+
+(defn listen-next-tick!
+  [callback]
+  (letfn [(step [] (if (callback) (goog.async.nextTick step)))]
+    (goog.async.nextTick step)))
 
 ;; (defn foldp! [func init in]
 ;;   (let [out (chan)]
@@ -218,6 +229,14 @@
 ;;         (put! out m2)
 ;;         (recur m2 (<! in))))
 ;;     out))
+
+(defn take-back!
+  "A delayed callback that pegs to the next message on the channel."
+  [channel callback]
+  (go-loop []
+    (when-let [taken (<! channel)]
+      (callback taken)
+      (recur))))
 
 
 ;; -----------------------------------------------------------------------------
