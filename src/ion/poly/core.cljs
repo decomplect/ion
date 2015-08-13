@@ -1,5 +1,6 @@
 (ns ion.poly.core
-  (:require-macros [cljs.core.async.macros :refer [go go-loop]])
+  (:require-macros
+    [cljs.core.async.macros :refer [go go-loop]])
   (:require
    [cljs.core :as cljs]
    [cljs.core.async :refer [<! >! chan close! put! sliding-buffer timeout]]
@@ -178,8 +179,23 @@
   [callback]
   (letfn [(step
            [timestamp]
-           (if (callback timestamp) (request-animation-frame! step)))]
+           (when (callback timestamp) (request-animation-frame! step)))]
     (request-animation-frame! step)))
+
+(defn animation-frame-loop!
+  ([callback]
+   (animation-frame-loop! callback true))
+  ([callback activate?]
+   (let [alive? (atom true)
+         active? (atom activate?)]
+     (letfn [(step
+               [timestamp]
+               (when @alive?
+                 (request-animation-frame! step)
+                 (when @active?
+                   (callback timestamp))))]
+       (request-animation-frame! step))
+     [alive? active?])))
 
 (defn listen-fps!
   "Executes callback at every frame returning the frames-per-second."
