@@ -175,13 +175,6 @@
   [callback]
   (.start (goog.async.AnimationDelay. callback)))
 
-(defn listen-animation-frame!
-  [callback]
-  (letfn [(step
-           [timestamp]
-           (when (callback timestamp) (request-animation-frame! step)))]
-    (request-animation-frame! step)))
-
 (defn animation-frame-loop!
   ([callback]
    (animation-frame-loop! callback true))
@@ -196,6 +189,13 @@
                    (callback timestamp))))]
        (request-animation-frame! step))
      [alive? active?])))
+
+(defn listen-animation-frame!
+  [callback]
+  (letfn [(step
+           [timestamp]
+           (when (callback timestamp) (request-animation-frame! step)))]
+    (request-animation-frame! step)))
 
 (defn listen-fps!
   "Executes callback at every frame returning the frames-per-second."

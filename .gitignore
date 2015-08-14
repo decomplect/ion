@@ -1,4 +1,6 @@
+*.iml
 out/
 target/
+.idea/
 .nrepl*
 .repl*
