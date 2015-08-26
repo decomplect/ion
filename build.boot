@@ -22,6 +22,23 @@
      sift {:move {+re-source-files+ "ion/cuss/$1"}})
     identity))
 
+(deftask ergo
+         "Set env and task options for ion.ergo tasks."
+         []
+         (let [version "0.1.0-SNAPSHOT"]
+           (bootlaces! version)
+           (set-env!
+             :resource-paths #{"src/ion/ergo"})
+           (task-options!
+             pom {:project 'ion/logo
+                  :version version
+                  :description "Clojure(Script) Ergo DSL"
+                  :license {"EPL" "http://www.eclipse.org/legal/epl-v10.html"}
+                  :scm {:url "https://github.com/decomplect/ion/src/ion/ergo"}
+                  :url "https://github.com/decomplect/ion#ergo"}
+             sift {:move {+re-source-files+ "ion/ergo/$1"}})
+           identity))
+
 (deftask omni
   "Set env and task options for ion.omni tasks."
   []
