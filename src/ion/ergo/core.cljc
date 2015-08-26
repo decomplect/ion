@@ -23,25 +23,3 @@
 (defn clamp-normalized
   [x] (if (< x -1.0) -1.0 (if (> x 1.0) 1.0 x)))
 
-
-(def foo-axiom '(:A))
-
-(def foo-rules {:A '(:B :- :A :- :B)
-                :B '(:A :+ :B :+ :A)})
-
-(def foo-xf (replace foo-rules))
-
-(defn foo-next [coll]
-  (flatten (transduce foo-xf conj coll)))
-
-(def foo-gen (iterate foo-next '(:A)))
-
-(def foo (iterate #(flatten (transduce (replace foo-rules) conj %)) '(:A)))
-
-(defn bar [rules axiom]
-  "Returns a lazy sequence of colls, starting with axiom, where each
-   subsequent coll is the result of the replacement rules applied to the
-   preceding coll."
-  (iterate #(flatten (transduce (replace rules) conj %)) axiom))
-
-(def foo-bar (bar foo-rules foo-axiom))
