@@ -37,18 +37,26 @@
   [{:keys [axiom context? rules]}]
   (generate (partial rewrite rules context?) axiom context?))
 
-(def grammar {:old-foo
-              {:axiom [:A]
-               :context? false
-               :rules {:A [:B :- :A :- :B]
-                       :B #(vector :A :+ :B :+ :A)
-                       :C (fn [key] ())
-                       }}
-              :foo
-              {:axiom [[:A {:age 0}]]
-               :context? true
-               :rules {:A [:B :- :A :- :B]
-                       :B (fn [key pre-key post-key] (vector :A :+ :B :+ :A))
-                       }}})
+(defn age [v]
+  (inc (:age (peek v))))
 
-(def foo-modules (modules (:foo grammar)))
+(def grammar
+  {:foo-1
+   {:axiom [:A]
+    :context? false
+    :rules {:A [:B :- :A :- :B]
+            :B #(vec [:A :+ :B :+ :A])
+            :C (fn [v] ())}}
+   :foo-2
+   {:axiom [[:A {:age 0}]]
+    :context? false
+    :rules {:A #(vec [[:B {:age 0}] :- [:A {:age (age %)}] :- [:B {:age 0}]])
+            :B (fn [v] (vec [[:A {:age 0}] :+ [:B {:age (age v)}] :+ [:A {:age 0}]]))}}
+   :foo-3
+   {:axiom [[:A {:age 0}]]
+    :context? true
+    :rules {:A [:B :- :A :- :B]
+            :B (fn [v prev post] (vec [:A :+ :B :+ :A]))}}
+   })
+
+(def foo-modules (modules (:foo-2 grammar)))
