@@ -23,7 +23,7 @@
 (defn evaluate
   [f context? coll]
   (if context?
-    (mapcat (partial f coll) (map vector (range) coll))
+    (mapcat #(apply (partial f coll) %) (map vector (range) coll))
     (mapcat (partial f nil nil) coll)))
 
 (defn generate
@@ -48,8 +48,7 @@
               {:axiom [[:A {:age 0}]]
                :context? true
                :rules {:A [:B :- :A :- :B]
-                       :B #(vector :A :+ :B :+ :A)
-                       :C (fn [key pre-key post-key] ())
+                       :B (fn [key pre-key post-key] (vector :A :+ :B :+ :A))
                        }}})
 
 (def foo-modules (modules (:foo grammar)))
