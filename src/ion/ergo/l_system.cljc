@@ -20,7 +20,9 @@
         replacement))
     [v]))
 
-(defn evaluate
+(defn derive
+  "Return the successor coll resulting from rewriting each item in the
+   predecessor coll."
   [f context? generation coll]
   (if context?
     (mapcat #(apply (partial f generation coll) %) (map vector (range) coll))
@@ -31,8 +33,8 @@
    subsequent coll is the result of mapcat f applied to the preceding coll."
   [f axiom context?]
   (let [counter (atom 0)
-        evaluater (partial evaluate f context?)]
-    (iterate #(evaluater (swap! counter inc) %) (mapcat vector axiom))))
+        step (partial derive f context?)]
+    (iterate #(step (swap! counter inc) %) (mapcat vector axiom))))
 
 (defn modules
   "Returns a lazy sequence of modules for a grammar."
@@ -52,12 +54,12 @@
    {:axiom [[:A {:age 0}]]
     :context? false
     :rules {:A #(vec [[:B {:age 0}] :- [:A {:age (age %2)}] :- [:B {:age 0}]])
-            :B (fn [gen v] (vec [[:A {:age 0}] :+ [:B {:age (age v)}] :+ [:A {:age 0}]]))}}
+            :B (fn [g v] (vec [[:A {:age 0}] :+ [:B {:age (age v)}] :+ [:A {:age 0}]]))}}
    :foo-3
    {:axiom [[:A {:age 0}]]
     :context? true
     :rules {:A [:B :- :A :- :B]
-            :B (fn [gen v pre post] (vec [:A :+ :B :+ :A]))}}
+            :B (fn [g v l r] (vec [:A :+ :B :+ :A]))}}
    })
 
 ;(defn foo-modules [] (modules (:foo-2 grammar)))
