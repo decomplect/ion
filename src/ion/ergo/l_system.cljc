@@ -10,27 +10,29 @@
 (defn rewrite
   "Returns [v] or a replacement value if key is found in the rules mapping.
    If replacement is a function it will be called."
-  [rules context? coll n v]
+  [rules context? generation coll n v]
   (if-let [e (find rules (lookup v))]
     (let [replacement (val e)]
       (if (fn? replacement)
         (if context?
-          (replacement v (get coll (dec n)) (get coll (inc n)))
-          (replacement v))
+          (replacement generation v (get coll (dec n)) (get coll (inc n)))
+          (replacement generation v))
         replacement))
     [v]))
 
 (defn evaluate
-  [f context? coll]
+  [f context? generation coll]
   (if context?
-    (mapcat #(apply (partial f coll) %) (map vector (range) coll))
-    (mapcat (partial f nil nil) coll)))
+    (mapcat #(apply (partial f generation coll) %) (map vector (range) coll))
+    (mapcat (partial f generation nil nil) coll)))
 
 (defn generate
   "Returns a lazy sequence of colls, starting with axiom, where each
    subsequent coll is the result of mapcat f applied to the preceding coll."
   [f axiom context?]
-  (iterate (partial evaluate f context?) (mapcat vector axiom)))
+  (let [counter (atom 0)
+        evaluater (partial evaluate f context?)]
+    (iterate #(evaluater (swap! counter inc) %) (mapcat vector axiom))))
 
 (defn modules
   "Returns a lazy sequence of modules for a grammar."
@@ -45,18 +47,17 @@
    {:axiom [:A]
     :context? false
     :rules {:A [:B :- :A :- :B]
-            :B #(vec [:A :+ :B :+ :A])
-            :C (fn [v] ())}}
+            :B #(vec [:A :+ :B :+ :A])}}
    :foo-2
    {:axiom [[:A {:age 0}]]
     :context? false
-    :rules {:A #(vec [[:B {:age 0}] :- [:A {:age (age %)}] :- [:B {:age 0}]])
-            :B (fn [v] (vec [[:A {:age 0}] :+ [:B {:age (age v)}] :+ [:A {:age 0}]]))}}
+    :rules {:A #(vec [[:B {:age 0}] :- [:A {:age (age %2)}] :- [:B {:age 0}]])
+            :B (fn [gen v] (vec [[:A {:age 0}] :+ [:B {:age (age v)}] :+ [:A {:age 0}]]))}}
    :foo-3
    {:axiom [[:A {:age 0}]]
     :context? true
     :rules {:A [:B :- :A :- :B]
-            :B (fn [v prev post] (vec [:A :+ :B :+ :A]))}}
+            :B (fn [gen v pre post] (vec [:A :+ :B :+ :A]))}}
    })
 
-(def foo-modules (modules (:foo-2 grammar)))
+;(defn foo-modules [] (modules (:foo-2 grammar)))
