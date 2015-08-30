@@ -99,6 +99,10 @@
    {:axiom [[:A {:age 0}]]
     :rules {:A [:B :- :A :- :B]
             :B (fn [g c i v] (vec [:A :+ :B :+ :A]))}}
-   })
+   :Thue-Morse-sequence
+   {:axiom [:0]
+    :rules {:0 [:0 :1]
+            :1 [:1 :0]}
+    }})
 
 ;(defn foo-words [] (words (:foo-2 grammar)))
