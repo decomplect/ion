@@ -40,19 +40,19 @@
    the growth of plants, morphogenesis, crystallography, and more.")
 
 (defn lookup
-  "Returns key or the first item in key when key is a vector."
-  [key]
-  (if (sequential? key) (first key) key))
+  "Returns module or the first item in module when module is a vector."
+  [module]
+  (if (sequential? module) (first module) module))
 
 (defn rewrite
-  "Returns [module] or a rewritten/successor module if key is found in the
-   rules mapping. If replacement is a function it will be called."
+  "Returns [module] or a successor module if module is found in the rules
+   mapping. If successor is a function it will be called."
   [rules generation word [index module]]
   (if-let [e (find rules (lookup module))]
-    (let [replacement (val e)]
-      (if (fn? replacement)
-        (replacement generation word index module)
-        replacement))
+    (let [successor (val e)]
+      (if (fn? successor)
+        (successor generation word index module)
+        successor))
     [module]))
 
 (defn process
@@ -88,11 +88,11 @@
 ; from "The On-Line Encyclopedia of Integer Sequences" https://oeis.org/
 
 (def grammar
-  {:A003849 ; Fibonacci word
+  {:A003849 ; Fibonacci sequence
    {:axiom [0]
     :rules {0 [0 1]
             1 [0]}}
-   ;:A005614 ; Fibonacci word
+   ;:A005614 ; Fibonacci sequence
    ;{:axiom [1]
    ; :rules {0 [1]
    ;         1 [1 0]}}
@@ -139,13 +139,13 @@
    :foo-1
    {:axiom [:A]
     :rules {:A [:B :- :A :- :B]
-            :B (fn [& _] (vec [:A :+ :B :+ :A]))}}
+            :B (fn [& _] [:A :+ :B :+ :A])}}
    :foo-2
    {:axiom [[:A {:age 0}]]
     :rules {:A #(vec [[:B {:age 0}] :- [:A {:age (age %4)}] :- [:B {:age 0}]])
-            :B (fn [g c i v] (vec [[:A {:age 0}] :+ [:B {:age (age v)}] :+ [:A {:age 0}]]))}}
+            :B (fn [g w i m] [[:A {:age 0}] :+ [:B {:age (age m)}] :+ [:A {:age 0}]])}}
    :foo-3
    {:axiom [[:A {:age 0}]]
     :rules {:A [:B :- :A :- :B]
-            :B (fn [g c i v] (vec [:A :+ :B :+ :A]))}}
+            :B (fn [g w i m] [:A :+ :B :+ :A])}}
    })

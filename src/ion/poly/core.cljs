@@ -42,6 +42,9 @@
 )
 
 
+;; http://www.martinklepsch.org/posts/parameterizing-clojurescript-builds.html
+;; goog.define
+
 ;; -----------------------------------------------------------------------------
 ;; String Helpers - For additional functionality use the cuerdas library:
 ;;                  https://github.com/funcool/cuerdas
