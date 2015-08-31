@@ -36,8 +36,8 @@
 
    Because productions tend to replace one module with more than one module,
    words tend to grow in size. And because this growth is recursive, L-systems
-   are good at modeling a variety of processes such as: fractal geometry, the
-   growth of plants, morphogenesis, and more.")
+   are useful for modeling a variety of processes such as: fractal geometry,
+   the growth of plants, morphogenesis, crystallography, and more.")
 
 (defn lookup
   "Returns key or the first item in key when key is a vector."
@@ -82,8 +82,57 @@
 (defn age [v]
   (inc (:age (peek v))))
 
+
+
+; When a grammar produces an integer sequence it is named after its identifier
+; from "The On-Line Encyclopedia of Integer Sequences" https://oeis.org/
+
 (def grammar
-  {:foo-0
+  {:A003849 ; Fibonacci word
+   {:axiom [0]
+    :rules {0 [0 1]
+            1 [0]}}
+   ;:A005614 ; Fibonacci word
+   ;{:axiom [1]
+   ; :rules {0 [1]
+   ;         1 [1 0]}}
+   :A010060 ; Thue-Morse sequence
+   {:axiom [0]
+    :rules {0 [0 1]
+            1 [1 0]}}
+   :A014577 ; Dragon-curve sequence
+   {:axiom [:L]
+    :rules {:L [:L :1 :R]
+            :R [:L :0 :R]}}
+   :A026465 ; Length of n-th run of identical symbols in the Thue-Morse sequence A010060
+   {:axiom [1]
+    :rules {1 [1 2 1]
+            2 [1 2 2 2 1]}}
+   :A029883 ; First differences of Thue-Morse sequence A001285
+   {:axiom [1]
+    :rules {1 [1 0 -1]
+            0 [1 -1]
+            -1 [0]}}
+   :A036577 ; Ternary Thue-Morse sequence
+   {:axiom [2]
+    :rules {0 [1]
+            1 [2 0]
+            2 [2 1 0]}}
+   :A166253
+   {:axiom [1]
+    :rules {0 [0 1 1 1 0]
+            1 [1 0 0 0 1]}}
+   :template
+   {:axiom [0]
+    :rules {0 []
+            1 []}}
+   :Rudin-Shapiro-sequence
+   {:axiom [:AA]
+    :rules {:AA [:AA :AB]
+            :AB [:AA :BA]
+            :BA [:BB :AB]
+            :BB [:BB :BA]}}
+   :foo-0
    {:axiom [:A]
     :rules {:A [:B :- :A :- :B]
             :B [:A :+ :B :+ :A]}}
@@ -99,10 +148,4 @@
    {:axiom [[:A {:age 0}]]
     :rules {:A [:B :- :A :- :B]
             :B (fn [g c i v] (vec [:A :+ :B :+ :A]))}}
-   :Thue-Morse-sequence
-   {:axiom [:0]
-    :rules {:0 [:0 :1]
-            :1 [:1 :0]}
-    }})
-
-;(defn foo-words [] (words (:foo-2 grammar)))
+   })
