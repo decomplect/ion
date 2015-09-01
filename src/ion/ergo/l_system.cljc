@@ -91,7 +91,7 @@
    original word and updating the properties in state."
   [rules generation word state]
   (let [new-state (atom {})
-        new-index (atom (int 0))
+        new-index (atom 0)
         rewriter (partial rewrite rules generation word state new-state new-index)
         new-word (doall (mapcat rewriter (map vector (range) word)))]
     [new-word @new-state]))
