@@ -47,17 +47,18 @@
    optional state data to be associated with each module. It also allows rules
    to be expressed using functions. If a rule's replacement value is a function
    it will be called and passed a set of arguments that can be used to
-   calculate the module (and, optionally, data) to be returned by the function.
-   To associate state data with a module, a replacement value must be a
-   2-element list where the first element is the module and the second element
-   is anything, though it would usually be a map containing property values.
+   calculate the successor module(s) (and, optionally, data) to be returned by
+   the function. To associate state data with a module, a successor module must
+   be a 2-element list where the first element is the module and the second
+   element is anything, though it would usually be a map containing property
+   values.
 
-   During the processing of productions, any optional module data is
-   accumulated in a map indexed by the position of the module in the word. Each
-   generation of a system is therefore represented by a [word, state] pair,
-   where state is a map containing the optional data for the word sequence. If
-   a grammar does not make use of state data, the state in each [word, state]
-   pair will simply be an empty map.")
+   During the processing of productions, any optional module state data is
+   stored in a map using a key that is the index position of the module in the
+   word. Each generation of a system is therefore represented by a [word,
+   state] pair, where state is a map containing the optional data for the word
+   sequence. If a grammar does not make use of state data, the state in each
+   [word, state] pair will simply be an empty map.")
 
 (defn split-successor
   "Returns a sequence of modules, updating new-state with any successor data."
