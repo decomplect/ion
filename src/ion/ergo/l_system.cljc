@@ -39,36 +39,57 @@
    are useful for modeling a variety of processes such as: fractal geometry,
    the growth of plants, morphogenesis, crystallography, and more.")
 
-(defn lookup
-  "Returns module or the first item in module when module is a vector."
-  [module]
-  (if (sequential? module) (first module) module))
+(defn split-successor
+  "Returns a sequence of modules, updating new-state with any successor data."
+  [successor new-state index]
+  (vec ; We don't want this to be lazy since it has side-effects.
+    (for [[n, module] (map vector (range) successor)]
+      (if (list? module)
+        (let [[module data] module]
+          (swap! new-state assoc (+ index n) data)
+          module)
+        module))))
 
 (defn rewrite
   "Returns [module] or a successor module if module is found in the rules
    mapping. If successor is a function it will be called."
-  [rules generation word [index module]]
-  (if-let [e (find rules (lookup module))]
-    (let [successor (val e)]
-      (if (fn? successor)
-        (successor generation word index module)
-        successor))
-    [module]))
+  [rules generation word state new-state new-index [index module]]
+  ;(prn :Rewrite index module @new-index)
+  (if-let [e (find rules module)]
+    (let [successor (val e)
+          successor (if (fn? successor)
+                      (successor generation word state index module)
+                      successor)
+          successor (split-successor successor new-state @new-index)]
+      (swap! new-index + (count successor))
+      successor)
+    (do
+      (swap! new-index inc)
+      [module])))
 
 (defn process
-  "Return a word resulting from rewriting each module in the original word."
-  [rules generation word]
-  (mapcat (partial rewrite rules generation word) (map vector (range) word)))
+  "Returns new [word state] pair resulting from rewriting each module in the
+   original word and updating the properties in state."
+  [rules generation word state]
+  ;(prn :Process generation word state)
+  (let [new-state (atom {})
+        new-index (atom 0)
+        rewriter (partial rewrite rules generation word state new-state new-index)
+        ; Use vec to eliminate laziness since rewriter has side-effects.
+        new-word (vec (mapcat rewriter (map vector (range) word)))]
+    [new-word @new-state]))
 
 (defn generate
-  "Returns a lazy sequence of words, starting with axiom, where each
-   subsequent word is the result of a rewrite derivation of the preceding word."
+  "Returns a lazy sequence of [word state] pairs, where each subsequent word is
+   the result of a rewrite derivation of the preceding word."
   [rules axiom]
-  (let [counter (atom 0)]
-    (iterate #(process rules (swap! counter inc) %) (mapcat vector axiom))))
+  (let [counter (atom 0)
+        genproc (fn [[word state]] (process rules (swap! counter inc) word state))
+        initial (process {:init axiom} @counter [:init] {})]
+    (iterate genproc initial)))
 
-(defn words
-  "Returns a lazy sequence of words for a grammar, beginning with axiom."
+(defn gen
+  "Returns a lazy sequence of [word state] pairs for a grammar."
   [{:keys [axiom rules]}]
   (generate rules axiom))
 
@@ -79,9 +100,9 @@
   [coll index]
   [(get coll (dec index)) (get coll (inc index))])
 
-(defn age [v]
-  (inc (:age (peek v))))
 
+(defn age [state index]
+  (inc (:age (get state index))))
 
 
 ; When a grammar produces an integer sequence it is named after its identifier
@@ -141,11 +162,15 @@
     :rules {:A [:B :- :A :- :B]
             :B (fn [& _] [:A :+ :B :+ :A])}}
    :foo-2
-   {:axiom [[:A {:age 0}]]
-    :rules {:A #(vec [[:B {:age 0}] :- [:A {:age (age %4)}] :- [:B {:age 0}]])
-            :B (fn [g w i m] [[:A {:age 0}] :+ [:B {:age (age m)}] :+ [:A {:age 0}]])}}
+   {:axiom ['(:A {:color :Red})]
+    :rules {:A ['(:B {:color :Light-Blue}) :- '(:A {:color :Red}) :- '(:B {:color :Dark-Blue})]
+            :B ['(:A {:color :Dark-Red}) :+ (list :B {:color :Blue}) :+ '(:A {:color :Light-Red})]}}
    :foo-3
-   {:axiom [[:A {:age 0}]]
+   {:axiom ['(:A {:age 0})]
+    :rules {:A #(vec ['(:B {:age 0}) :- (list %5 {:age (age %3 %4)}) :- '(:B {:age 0})])
+            :B (fn [g w s i m] ['(:A {:age 0}) :+ (list m {:age (age s i)}) :+ '(:A {:age 0})])}}
+   :foo-4
+   {:axiom ['(:A {:age 0})]
     :rules {:A [:B :- :A :- :B]
-            :B (fn [g w i m] [:A :+ :B :+ :A])}}
+            :B (fn [g w s i m] [:A :+ :B :+ :A])}}
    })
