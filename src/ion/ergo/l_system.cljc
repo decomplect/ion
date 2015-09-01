@@ -10,39 +10,59 @@
    the datatype of the same name. Instead we refer to that part of the system
    as a \"Word\", although it should not be confused with the everyday notion
    of a word in a spoken language. And while we avoid calling a Word a String,
-   a Word is typically represented in an L-system by a `string`, although it
-   doesn't need to be. And a Word is a sequence of somethings. For similar
-   reasons we prefer to call those \"somethings\" Modules instead of the other
-   commonly used term \"Letters\". (And so begins the inevitable confusion...)
+   a Word is often represented in an L-system by a `string`, although it
+   doesn't need to be (and isn't here). And a Word is a sequence of somethings.
+   For similar reasons we prefer to call those \"somethings\" Modules instead
+   of the other commonly used term \"Letters\". (And so begins the inevitable
+   confusion...)
 
    With that in mind, we describe an L-system as a parallel rewriting system.
-   A rewriting system takes an intial input value made up of a collection of
-   one or more symbols (we call that collection of symbols a \"Word\"), and
+   A rewriting system takes an intial input value made up of a sequence of one
+   or more symbols (we call that sequence of symbols a \"Word\"), and
    recursively produces new \"Words\" by replacing each input symbol (called a
-   Module) with itself or a successor symbol/module (or collection of modules)
+   Module) with itself or a successor symbol/module (or sequence of modules)
    determined according to a set of production rules. The rewriting is treated
-   as if the replacements all took place in parallel.
+   as if the replacements all took place in parallel for each generation.
 
    L-systems operate on words, which are sequences of modules. When
-   represented programatically, modules can be simple keywords or characters,
-   or they can be compound structures containing additional parameters or local
-   state.
+   represented programatically, modules are typically simple integers,
+   character literals, strings or keywords. This implementation allows a module
+   to be any value that is a valid key in a map. So a module can also be a
+   compound structure, such as a vector containing a pair of integers.
 
-   Beginning with an intial word, called an axiom, an L-system generates a
+   Beginning with an initial word, called an axiom, an L-system generates a
    developmental sequence of words by recusively applying a set of productions,
    or replacement rules. The resulting seqence of words can then be used as
-   data for futher processing, such as to be rendered graphically or output as
-   music.
+   data for futher processing, such as to be rendered as a graphic or
+   animation, or played as music. We call each word in this sequence a
+   generation.
 
-   Because productions tend to replace one module with more than one module,
-   words tend to grow in size. And because this growth is recursive, L-systems
-   are useful for modeling a variety of processes such as: fractal geometry,
-   the growth of plants, morphogenesis, crystallography, and more.")
+   Because productions typically replace each module with more than one
+   module, words tend to grow in size with each successive generation. And
+   because this growth is recursive, L-systems are useful for modeling a
+   variety of mathematical and natural processes such as: fractal geometry, the
+   growth and branching of plants, morphogenesis, crystallography, and more.
+
+   To fully support more advanced processing, this implementation allows
+   optional state data to be associated with each module. It also allows rules
+   to be expressed using functions. If a rule's replacement value is a function
+   it will be called and passed a set of arguments that can be used to
+   calculate the module (and, optionally, data) to be returned by the function.
+   To associate state data with a module, a replacement value must be a
+   2-element list where the first element is the module and the second element
+   is anything, though it would usually be a map containing property values.
+
+   During the processing of productions, any optional module data is
+   accumulated in a map indexed by the position of the module in the word. Each
+   generation of a system is therefore represented by a [word, state] pair,
+   where state is a map containing the optional data for the word sequence. If
+   a grammar does not make use of state data, the state in each [word, state]
+   pair will simply be an empty map.")
 
 (defn split-successor
   "Returns a sequence of modules, updating new-state with any successor data."
   [successor new-state index]
-  (vec ; We don't want this to be lazy since it has side-effects.
+  (doall
     (for [[n, module] (map vector (range) successor)]
       (if (list? module)
         (let [[module data] module]
@@ -54,7 +74,6 @@
   "Returns [module] or a successor module if module is found in the rules
    mapping. If successor is a function it will be called."
   [rules generation word state new-state new-index [index module]]
-  ;(prn :Rewrite index module @new-index)
   (if-let [e (find rules module)]
     (let [successor (val e)
           successor (if (fn? successor)
@@ -71,12 +90,10 @@
   "Returns new [word state] pair resulting from rewriting each module in the
    original word and updating the properties in state."
   [rules generation word state]
-  ;(prn :Process generation word state)
   (let [new-state (atom {})
-        new-index (atom 0)
+        new-index (atom (int 0))
         rewriter (partial rewrite rules generation word state new-state new-index)
-        ; Use vec to eliminate laziness since rewriter has side-effects.
-        new-word (vec (mapcat rewriter (map vector (range) word)))]
+        new-word (doall (mapcat rewriter (map vector (range) word)))]
     [new-word @new-state]))
 
 (defn generate
