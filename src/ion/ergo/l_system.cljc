@@ -60,6 +60,27 @@
    sequence. If a grammar does not make use of state data, the state in each
    [word, state] pair will simply be an empty map.")
 
+
+(comment
+  "The simplest possible, deterministic, context-free rewriting system is
+   illustrated here. The remainder of the code in this file is a result of the
+   requirements for context-sensitive, parametric and stochastic systems."
+
+  (def axiom [0])
+
+  (def rules {0 [0 1]
+              1 [0]})
+
+  (defn simplest-possible-system
+    [rules axiom]
+    (iterate #(apply concat (replace rules %)) (seq axiom)))
+
+  (take 20 (simplest-possible-system rules axiom))
+
+  (count (nth (simplest-possible-system rules axiom) 35)) ; 24157817
+  )
+
+
 (defn split-successor
   "Returns a sequence of modules, updating new-state with any successor data."
   [successor new-state index]
@@ -112,11 +133,10 @@
   (generate rules axiom))
 
 
-
 #_(defn context
   "Returns a vector of left / right context values."
-  [coll index]
-  [(get coll (dec index)) (get coll (inc index))])
+  [word index]
+  [(get word (dec index)) (get word (inc index))])
 
 
 (defn age [state index]
