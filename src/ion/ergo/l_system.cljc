@@ -125,7 +125,7 @@
 ; Example Systems
 
 (defn fibonacci-sequence-basic
-  "Returns a lazy sequence of Fibonacci integers OEIS A003849."
+  "Returns a lazy sequence of vectors of Fibonacci integers - OEIS A003849."
   []
   (let [rules {:axiom [0]
                0 [0 1]
@@ -133,7 +133,8 @@
     (basic-system rules)))
 
 (defn fibonacci-sequence-stochastic
-  "Returns a lazy sequence of Fibonacci integers starting with 0 or 1."
+  "Returns a lazy sequence of vectors of Fibonacci integers starting randomly
+   with 0 or 1."
   []
   (let [rules {:axiom #(vec [(rand-int 2)])
                0 [0 1]
