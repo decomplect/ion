@@ -62,22 +62,22 @@
 
 
 (comment
-  "The simplest possible, deterministic, context-free rewriting system is
-   illustrated here. The remainder of the code in this file is a result of the
-   requirements for context-sensitive, parametric and stochastic systems."
+  "A minimal working example of a deterministic, context-free rewriting system
+   is illustrated here. The remainder of the code in this file is a result of
+   the requirements for context-sensitive, parametric and stochastic systems."
 
   (def axiom [0])
 
   (def rules {0 [0 1]
               1 [0]})
 
-  (defn simplest-possible-system
+  (defn minimal-working-system
     [rules axiom]
     (iterate #(apply concat (replace rules %)) (seq axiom)))
 
-  (take 20 (simplest-possible-system rules axiom))
+  (take 20 (minimal-working-system rules axiom))
 
-  (count (nth (simplest-possible-system rules axiom) 35)) ; 24157817
+  (count (nth (minimal-working-system rules axiom) 35)) ; 24157817
   )
 
 
