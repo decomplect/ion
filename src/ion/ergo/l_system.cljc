@@ -61,9 +61,12 @@
    [word, state] pair will simply be an empty map.")
 
 
+; -----------------------------------------------------------------------------
+; Minimal Working System Examples
+
 (comment
-  "A minimal working example of a deterministic, context-free rewriting system
-   is illustrated here. The remainder of the code in this file is a result of
+  "Minimal working examples of deterministic, context-free rewriting systems
+   are illustrated here. The remainder of the code in this file is a result of
    the requirements for context-sensitive, parametric and stochastic systems."
 
   (def axiom [0])
@@ -78,8 +81,78 @@
   (take 20 (minimal-working-system rules axiom))
 
   (count (nth (minimal-working-system rules axiom) 35)) ; 24157817
+
+  (defn minimal-working-system-b
+    [rules axiom]
+    (iterate (fn [word] (mapcat #(or (rules %) [%]) word)) (seq axiom)))
+
   )
 
+
+; -----------------------------------------------------------------------------
+; Transducers
+
+(defn replace-xform
+  "Returns a transducer that will apply the replacement rules to a word."
+  [rules]
+  (map #(or (rules %) [%])))
+
+(defn call-without-arguments-xform
+  "Returns a transducer that will call any function without passing arguments."
+  []
+  (map #(if (fn? %) (%) %)))
+
+
+; -----------------------------------------------------------------------------
+; Lindenmayer Systems
+
+(defn system
+  "Returns an L-system based on a transducer."
+  ([xform]
+   (system xform conj))
+  ([xform rfunc]
+   (let [gener (partial transduce (comp xform cat) rfunc)
+         axiom (gener [:axiom])]
+     (iterate gener axiom))))
+
+(defn basic-system
+  "Returns a basic L-system based on replacement rules."
+  ([rules]
+   (system (replace-xform rules))))
+
+
+; -----------------------------------------------------------------------------
+; Example Systems
+
+(defn fibonacci-sequence-basic
+  "Returns a lazy sequence of Fibonacci integers OEIS A003849."
+  []
+  (let [rules {:axiom [0]
+               0 [0 1]
+               1 [0]}]
+    (basic-system rules)))
+
+(defn fibonacci-sequence-stochastic
+  "Returns a lazy sequence of Fibonacci integers starting with 0 or 1."
+  []
+  (let [rules {:axiom #(vec [(rand-int 2)])
+               0 [0 1]
+               1 [0]}
+        xform (comp (replace-xform rules)
+                    (call-without-arguments-xform))]
+    (system xform)))
+
+(comment
+
+  (take 5 (fibonacci-sequence-basic))
+
+  (take 5 (fibonacci-sequence-stochastic))
+
+  )
+
+
+; -----------------------------------------------------------------------------
+; Old Code
 
 (defn split-successor
   "Returns a sequence of modules, updating new-state with any successor data."
