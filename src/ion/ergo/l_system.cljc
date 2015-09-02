@@ -97,6 +97,11 @@
   [rules]
   (map #(or (rules %) [%])))
 
+(defn call-with-arguments-xform
+  "Returns a transducer that will call any function with arguments."
+  [& more]
+  (map #(if (fn? %) (apply % more) %)))
+
 (defn call-without-arguments-xform
   "Returns a transducer that will call any function without passing arguments."
   []
@@ -119,6 +124,16 @@
   "Returns a basic L-system based on replacement rules."
   ([rules]
    (system (replace-xform rules))))
+
+#_(defn generational-system
+  "Returns an L-system based on a transducer and generation arg."
+  ([xform]
+   (system xform conj))
+  ([xform rfunc]
+   (let [counter (atom 0)
+         gener (partial transduce (comp xform cat) rfunc)
+         axiom (gener [:axiom])]
+     (iterate gener axiom))))
 
 
 ; -----------------------------------------------------------------------------
@@ -143,11 +158,28 @@
                     (call-without-arguments-xform))]
     (system xform)))
 
+(defn generational-stochastic-sequence
+  "Returns a lazy sequence of [generation [semi-random-integers]] pairs."
+  []
+  (let [generation (atom -1)
+        rules {:axiom [0]
+               0 (fn [g] [0 (rand-int (+ g 5)) 1])
+               1 [0]}
+        getxf #(comp (replace-xform rules)
+                     (call-with-arguments-xform @generation))
+        gener (fn [[_ word]]
+                (swap! generation inc)
+                [@generation (transduce (comp (getxf) cat) conj word)])
+        axiom (gener [@generation [:axiom]])]
+    (iterate gener axiom)))
+
 (comment
 
   (take 5 (fibonacci-sequence-basic))
 
   (take 5 (fibonacci-sequence-stochastic))
+
+  (take 5 (generational-stochastic-sequence))
 
   )
 
