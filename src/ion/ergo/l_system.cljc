@@ -58,7 +58,10 @@
    word. Each generation of a system is therefore represented by a [word,
    state] pair, where state is a map containing the optional data for the word
    sequence. If a grammar does not make use of state data, the state in each
-   [word, state] pair will simply be an empty map.")
+   [word, state] pair will simply be an empty map."
+
+  (:require #?(:clj  [clojure.test :refer [deftest is testing]]
+               :cljs [cljs.test :refer-macros [deftest is testing]])))
 
 
 ; -----------------------------------------------------------------------------
@@ -67,7 +70,9 @@
 (comment
   "Minimal working examples of deterministic, context-free rewriting systems
    are illustrated here. The remainder of the code in this file is a result of
-   the requirements for context-sensitive, parametric and stochastic systems."
+   the requirements for context-sensitive, parametric and stochastic systems.
+   The breakthrough is to view these as recursive axiomatic transducible
+   processes."
 
   (def axiom [0])
 
@@ -97,6 +102,24 @@
   [rules]
   (map #(or (rules %) [%])))
 
+(deftest replace-xform-test
+  (let [input  [0 1 2 3]
+        output [[0 1] [0 2] [2] [3]]
+        rules  {0 [0 1] 1 [0 2]}]
+    (is (= output (transduce (replace-xform rules) conj input)))))
+
+(deftest why-replace-fails-with-cat
+  (let [input  [0 1 2 3]
+        output [0 1 0 2 2 3]
+        rules  {0 [0 1] 1 [0 2]}]
+    (is (= output (transduce (comp (replace rules) cat) conj input)))))
+
+(deftest why-replace-xform-works-with-cat
+  (let [input  [0 1 2 3]
+        output [0 1 0 2 2 3]
+        rules  {0 [0 1] 1 [0 2]}]
+    (is (= output (transduce (comp (replace-xform rules) cat) conj input)))))
+
 (defn call-with-arguments-xform
   "Returns a transducer that will call any function with arguments."
   [& more]
@@ -112,28 +135,22 @@
 ; Lindenmayer Systems
 
 (defn system
-  "Returns an L-system based on a transducer."
+  "Returns a recursive axiomatic transducible process."
   ([xform]
    (system xform conj))
   ([xform rfunc]
-   (let [gener (partial transduce (comp xform cat) rfunc)
-         axiom (gener [:axiom])]
-     (iterate gener axiom))))
+   (let [process (partial transduce xform rfunc)
+         axiom (process [:axiom])]
+     (iterate process axiom))))
 
-(defn basic-system
-  "Returns a basic L-system based on replacement rules."
+(defn l-system
+  "Returns a replace >>> xform >>> cat system."
   ([rules]
-   (system (replace-xform rules))))
-
-#_(defn generational-system
-  "Returns an L-system based on a transducer and generation arg."
-  ([xform]
-   (system xform conj))
-  ([xform rfunc]
-   (let [counter (atom 0)
-         gener (partial transduce (comp xform cat) rfunc)
-         axiom (gener [:axiom])]
-     (iterate gener axiom))))
+   (l-system rules identity))
+  ([rules xform]
+   (l-system rules xform conj))
+  ([rules xform rfunc]
+   (system (comp (replace-xform rules) xform cat) rfunc)))
 
 
 ; -----------------------------------------------------------------------------
@@ -145,7 +162,10 @@
   (let [rules {:axiom [0]
                0 [0 1]
                1 [0]}]
-    (basic-system rules)))
+    (l-system rules)))
+
+(deftest fibonacci-sequence-basic-test
+  (is (= 144 (-> (fibonacci-sequence-basic) (nth 10) count))))
 
 (defn fibonacci-sequence-stochastic
   "Returns a lazy sequence of vectors of Fibonacci integers starting randomly
@@ -153,10 +173,8 @@
   []
   (let [rules {:axiom #(vec [(rand-int 2)])
                0 [0 1]
-               1 [0]}
-        xform (comp (replace-xform rules)
-                    (call-without-arguments-xform))]
-    (system xform)))
+               1 [0]}]
+    (l-system rules (call-without-arguments-xform))))
 
 (defn generational-stochastic-sequence
   "Returns a lazy sequence of [generation [semi-random-integers]] pairs."
@@ -165,13 +183,13 @@
         rules {:axiom [0]
                0 (fn [g] [0 (rand-int (+ g 5)) 1])
                1 [0]}
-        getxf #(comp (replace-xform rules)
-                     (call-with-arguments-xform @generation))
-        gener (fn [[_ word]]
-                (swap! generation inc)
-                [@generation (transduce (comp (getxf) cat) conj word)])
-        axiom (gener [@generation [:axiom]])]
-    (iterate gener axiom)))
+        get-xform #(comp (replace-xform rules)
+                         (call-with-arguments-xform @generation))
+        process (fn [[_ word]]
+                  (swap! generation inc)
+                  [@generation (transduce (comp (get-xform) cat) conj word)])
+        axiom (process [@generation [:axiom]])]
+    (iterate process axiom)))
 
 (comment
 
