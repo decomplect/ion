@@ -108,20 +108,15 @@
         rules  {0 [0 1] 1 [0 2]}]
     (is (= output (transduce (replace-xform rules) conj input)))))
 
-(comment
-  "One failing and one passing test to explain why we needed replace-xform."
-  (deftest replace-fails-with-cat
+(deftest cat-fails-with-replace
+  ; One passing test and one failing test to show why we needed replace-xform.
   ; Don't know how to create ISeq from: java.lang.Long
-    (let [input [0 1 2 3]
-          output [0 1 0 2 2 3]
-          rules {0 [0 1] 1 [0 2]}]
-      (is (= output (transduce (comp (replace rules) cat) conj input)))))
-  (deftest replace-xform-works-with-cat
-    (let [input [0 1 2 3]
-          output [0 1 0 2 2 3]
-          rules {0 [0 1] 1 [0 2]}]
-      (is (= output (transduce (comp (replace-xform rules) cat) conj input)))))
-  )
+  (let [input [0 1 2 3]
+        output [0 1 0 2 2 3]
+        rules {0 [0 1] 1 [0 2]}]
+    (is (= output (transduce (comp (replace-xform rules) cat) conj input)))
+    (is (= output (transduce (comp (replace rules) cat) conj input)))))
+
 
 (defn call-with-arguments-xform
   "Returns a transducer that will call any function with arguments."
@@ -138,34 +133,22 @@
 ; Lindenmayer Systems
 
 (defn system
-  "Returns a recursive axiomatic transducible process."
+  "Returns a lazy sequence of results from a recursive axiomatic transducible
+   process."
   ([axiom rules]
-   (system axiom rules (fn [] identity)))
-  ([axiom rules f]
-   (system axiom rules f conj))
-  ([axiom rules f rf]
-   (let [key :axiom
-         rules (merge {key axiom} rules)
-         get-xf #(comp (replace-xform rules) (f) cat)
-         process (fn [word] (transduce (get-xf) rf word))
-         init (process [key])]
-     (iterate process init))))
-
-(defn generational-system
-  "Returns a generational recursive axiomatic transducible process."
-  ([axiom rules]
-   (generational-system axiom rules (fn [_] identity)))
-  ([axiom rules f]
-   (generational-system axiom rules f conj))
-  ([axiom rules f rf]
+   (system axiom rules (fn [_] identity)))
+  ([axiom rules f-xf]
+   (system axiom rules f-xf (fn [_] conj)))
+  ([axiom rules f-xf f-rf]
    (let [generation (atom -1)
-         key :axiom
+         key ::axiom
          rules (merge {key axiom} rules)
-         get-xf (fn [g] (comp (replace-xform rules) (f g) cat))
-         process (fn [[_ word]]
+         get-xf (fn [g] (comp (replace-xform rules) (f-xf g) cat))
+         get-rf (fn [g] (f-rf g))
+         process (fn [word]
                    (swap! generation inc)
-                   [@generation (transduce (get-xf @generation) rf word)])
-         init (process [@generation [key]])]
+                   (transduce (get-xf @generation) (get-rf @generation) word))
+         init (process [key])]
      (iterate process init))))
 
 
@@ -184,18 +167,6 @@
   (is (= 144 (-> (fibonacci-sequence-basic) (nth 10) count))))
 
 
-(defn fibonacci-sequence-generational
-  "Returns a lazy sequence of [generation [Fibonacci integers]]."
-  []
-  (let [axiom [0]
-        rules {0 [0 1]
-               1 [0]}]
-    (generational-system axiom rules)))
-
-(deftest fibonacci-sequence-generational-test
-  (is (= 144 (-> (fibonacci-sequence-generational) (nth 10) peek count))))
-
-
 (defn fibonacci-sequence-stochastic
   "Returns a lazy sequence of vectors of Fibonacci integers starting randomly
    with 0 or 1."
@@ -203,22 +174,21 @@
   (let [axiom #(vec [(rand-int 2)])
         rules {0 [0 1]
                1 [0]}]
-    (system axiom rules call-without-arguments-xform)))
+    (system axiom rules (fn [_] (call-without-arguments-xform)))))
 
 
 (defn generational-stochastic-sequence
-  "Returns a lazy sequence of [generation [semi-random-integers]] pairs."
+  "Returns a lazy sequence of semi-random integers."
   []
   (let [axiom [0]
         rules {0 (fn [g] [0 (rand-int (+ g 5)) 1])
                1 [0]}
-        f (fn [g] (call-with-arguments-xform g))]
-    (generational-system axiom rules f)))
+        f-xf (fn [g] (call-with-arguments-xform g))]
+    (system axiom rules f-xf)))
 
 
 (comment
   (take 5 (fibonacci-sequence-basic))
-  (take 5 (fibonacci-sequence-generational))
   (take 5 (fibonacci-sequence-stochastic))
   (take 5 (generational-stochastic-sequence))
   )
