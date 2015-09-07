@@ -140,16 +140,16 @@
   ([axiom rules f-xf]
    (system axiom rules f-xf (fn [_] conj)))
   ([axiom rules f-xf f-rf]
-   (let [generation (atom -1)
-         key ::axiom
+   (let [key ::axiom
          rules (merge {key axiom} rules)
          get-xf (fn [g] (comp (replace-xform rules) (f-xf g) cat))
-         get-rf (fn [g] (f-rf g))
-         process (fn [word]
-                   (swap! generation inc)
-                   (transduce (get-xf @generation) (get-rf @generation) word))
-         init (process [key])]
-     (iterate process init))))
+         get-rf (fn [g] (f-rf g))]
+     (letfn [(process [g coll]
+                      (lazy-seq
+                        (when-let [s (seq coll)]
+                          (let [word (transduce (get-xf g) (get-rf g) s)]
+                            (cons word (process (inc g) word))))))]
+       (process 0 [key])))))
 
 
 ; -----------------------------------------------------------------------------
