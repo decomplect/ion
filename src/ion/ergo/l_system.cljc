@@ -95,65 +95,214 @@
 
 
 ; -----------------------------------------------------------------------------
-; Transducers
+; Transducers and Supporting Functions
 
-(defn replace-xform
-  "Returns a transducer that will apply the replacement rules to a word."
-  [rules]
-  (map #(or (rules %) [%])))
+(defn rewrite
+  "Returns [m] or a successor if m is found in the rules mapping."
+  [rules m]
+  (or (rules m) [m]))
 
-(deftest replace-xform-test
-  (let [input  [0 1 2 3]
-        output [[0 1] [0 2] [2] [3]]
-        rules  {0 [0 1] 1 [0 2]}]
-    (is (= output (transduce (replace-xform rules) conj input)))))
+(defn rewrite-indexed
+  "Returns [i m [m]] or [i m [successors]] if m is found in the rules mapping."
+  [rules [i m]]
+  [i m (or (rules m) [m])])
 
-(deftest cat-fails-with-replace
-  ; One passing test and one failing test to show why we needed replace-xform.
-  ; Don't know how to create ISeq from: java.lang.Long
-  (let [input [0 1 2 3]
-        output [0 1 0 2 2 3]
-        rules {0 [0 1] 1 [0 2]}]
-    (is (= output (transduce (comp (replace-xform rules) cat) conj input)))
-    (is (= output (transduce (comp (replace rules) cat) conj input)))))
 
+(deftest rewrite-test
+  (let [rules {:A [:B :A :B]}]
+    (is (= (rewrite rules :A) [:B :A :B]))
+    (is (= (rewrite rules :B) [:B]))
+    (is (= (rewrite rules :C) [:C]))))
+
+
+(defn call-without-arguments
+  "Return successor or the result of calling successor."
+  [successor]
+  (if (fn? successor) (successor) successor))
+
+#_(defn call-with-arguments
+  "Return successor or the result of calling successor with arguments."
+  [successor & more]
+  (if (fn? successor) (apply successor more) successor))
 
 (defn call-with-arguments-xform
   "Returns a transducer that will call any function with arguments."
   [& more]
   (map #(if (fn? %) (apply % more) %)))
 
-(defn call-without-arguments-xform
-  "Returns a transducer that will call any function without passing arguments."
+#_(defn split-module-params
+  "Returns a transducer that will split a list into a module and its parameters."
   []
-  (map #(if (fn? %) (%) %)))
+  (let [new-index 0]
+    (map (fn [i m ms] ms))))
 
 
 ; -----------------------------------------------------------------------------
 ; Lindenmayer Systems
 
-(defn system
+(def axiom-key ::axiom)
+
+(def jumpstart [axiom-key])
+
+(defn f-identity [& _] identity)
+
+(defn f-conj [& _] conj)
+
+(defn rewrite-xf
+  "Returns a rewrite rules transducer."
+  [axiom rules]
+  (let [rules (merge {axiom-key axiom} rules)]
+    (map (partial rewrite rules))))
+
+(defn basic-rewriter
+  "Returns a function that will return a basic rewrite transducer."
+  ([axiom rules]
+   (basic-rewriter axiom rules f-identity))
+  ([axiom rules f-xf]
+   (fn [] (comp (rewrite-xf axiom rules) (f-xf) cat))))
+
+(defn generational-rewriter
+  "Returns a function that will return a generational rewrite transducer."
+  ([axiom rules]
+   (generational-rewriter axiom rules f-identity))
+  ([axiom rules f-xf]
+   (fn [g] (comp (rewrite-xf axiom rules) (f-xf g) cat))))
+
+(defn basic-system
+  "Returns a lazy sequence of results from a recursive axiomatic transducible
+   process."
+  ([get-xf]
+   (basic-system get-xf f-conj))
+  ([get-xf get-rf]
+   (letfn [(process [w]
+                    (lazy-seq
+                      (when (seq w)
+                        (let [word (transduce (get-xf) (get-rf) w)]
+                          (cons word (process word))))))]
+     (process jumpstart))))
+
+(defn generational-system
+  "Returns a lazy sequence of results from a recursive axiomatic transducible
+   process."
+  ([get-xf]
+   (generational-system get-xf f-conj))
+  ([get-xf get-rf]
+   (letfn [(process [g w]
+                    (lazy-seq
+                      (when (seq w)
+                        (let [word (transduce (get-xf g) (get-rf g) w)]
+                          (cons word (process (inc g) word))))))]
+     (process 0 jumpstart))))
+
+
+(deftest basic-system-test
+  (let [axiom [0]
+        rules {0 [0 1] 1 [0]}]
+    (is (= 144 (-> (basic-system (basic-rewriter axiom rules)) (nth 10) count)))))
+
+(deftest generational-system-test
+  (let [axiom [0]
+        rules {0 [0 1] 1 [0]}]
+    (is (= 144 (-> (generational-system (generational-rewriter axiom rules)) (nth 10) count)))))
+
+
+#_(defn rewrite-system
   "Returns a lazy sequence of results from a recursive axiomatic transducible
    process."
   ([axiom rules]
-   (system axiom rules (fn [_] identity)))
+   (basic-system axiom rules (fn [_] identity)))
   ([axiom rules f-xf]
-   (system axiom rules f-xf (fn [_] conj)))
+   (basic-system axiom rules f-xf (fn [_] conj)))
   ([axiom rules f-xf f-rf]
-   (let [key ::axiom
-         rules (merge {key axiom} rules)
-         get-xf (fn [g] (comp (replace-xform rules) (f-xf g) cat))
+   (let [axiom-key ::axiom
+         rules (merge {axiom-key axiom} rules)
+         rewriter (map (partial rewrite rules))
+         start [axiom-key]
+         get-xf (fn [g] (comp rewriter (f-xf g) cat))
          get-rf (fn [g] (f-rf g))]
-     (letfn [(process [g coll]
+     (letfn [(process [g w]
                       (lazy-seq
-                        (when-let [s (seq coll)]
-                          (let [word (transduce (get-xf g) (get-rf g) s)]
+                        (when (seq w)
+                          (let [word (transduce (get-xf g) (get-rf g) w)]
                             (cons word (process (inc g) word))))))]
-       (process 0 [key])))))
+       (process 0 start)))))
+
+#_(defn contextual-parametric-system
+  "Returns a lazy sequence of results from a recursive axiomatic transducible
+   process."
+  ([axiom rules]
+   (contextual-parametric-system axiom rules (fn [_] identity)))
+  ([axiom rules f-xf]
+   (contextual-parametric-system axiom rules f-xf (fn [_] conj)))
+  ([axiom rules f-xf f-rf]
+   (let [axiom-key ::axiom
+         rules (merge {axiom-key axiom} rules)
+         rewriter (map (partial rewrite-indexed rules))
+         start [axiom-key]
+         get-xf (fn [g w d]
+                  (comp rewriter
+                        (split-module-params)
+                        (f-xf g w d)
+                        cat))
+         get-rf (fn [g] (f-rf g))]
+     (letfn [(process [g w d]
+                      (lazy-seq
+                        (when (seq w)
+                          (let [[word data] (transduce (get-xf g w d)
+                                                       (get-rf g)
+                                                       (map-indexed vector w))]
+                            (cons [word data] (process (inc g) word data))))))]
+       (process 0 start {})))))
+
+
+; -----------------------------------------------------------------------------
+; Helper Functions
+
+(defn age [pmap index]
+  (inc (:age (get pmap index))))
 
 
 ; -----------------------------------------------------------------------------
 ; Example Systems
+
+#_(defn contextual-parametric-system-example-0
+  []
+  (let [axiom ['(:A {:color :Red})]
+        rules {:A ['(:B {:color :Light-Blue})
+                   :-
+                   '(:A {:color :Red})
+                   :-
+                   '(:B {:color :Dark-Blue})]
+               :B ['(:A {:color :Dark-Red})
+                   :+
+                   (list :B {:color :Blue})
+                   :+
+                   '(:A {:color :Light-Red})]}]
+    (contextual-parametric-system axiom rules)))
+
+(comment (take 5 (contextual-parametric-system-example-0)))
+
+
+#_(defn contextual-parametric-system-example-1
+  []
+  (let [axiom ['(:A {:age 0})]
+        rules {:A (fn [g w p i m]
+                    ['(:B {:age 0})
+                     :-
+                     (list m {:age (age p i)})
+                     :-
+                     '(:B {:age 0})])
+               :B (fn [g w p i m]
+                    ['(:A {:age 0})
+                     :+
+                     (list m {:age (age p i)})
+                     :+
+                     '(:A {:age 0})])}
+        f-xf (fn [g] (comp (split-module-params) (call-with-arguments-xform g)))]
+    (contextual-parametric-system axiom rules f-xf)))
+
+#_(comment (take 5 (contextual-parametric-system-example-1)))
+
 
 (defn fibonacci-sequence-basic
   "Returns a lazy sequence of vectors of Fibonacci integers - OEIS A003849."
@@ -161,7 +310,7 @@
   (let [axiom [0]
         rules {0 [0 1]
                1 [0]}]
-    (system axiom rules)))
+    (basic-system (basic-rewriter axiom rules))))
 
 (deftest fibonacci-sequence-basic-test
   (is (= 144 (-> (fibonacci-sequence-basic) (nth 10) count))))
@@ -174,7 +323,7 @@
   (let [axiom #(vec [(rand-int 2)])
         rules {0 [0 1]
                1 [0]}]
-    (system axiom rules (fn [_] (call-without-arguments-xform)))))
+    (basic-system axiom rules (fn [_] (map call-without-arguments)))))
 
 
 (defn generational-stochastic-sequence
@@ -184,7 +333,7 @@
         rules {0 (fn [g] [0 (rand-int (+ g 5)) 1])
                1 [0]}
         f-xf (fn [g] (call-with-arguments-xform g))]
-    (system axiom rules f-xf)))
+    (basic-system axiom rules f-xf)))
 
 
 (comment
@@ -197,7 +346,7 @@
 ; -----------------------------------------------------------------------------
 ; Old Code
 
-(defn split-successor
+#_(defn split-successor
   "Returns a sequence of modules, updating new-state with any successor data."
   [successor new-state index]
   (doall
@@ -208,7 +357,7 @@
           module)
         module))))
 
-(defn rewrite
+#_(defn rewrite
   "Returns [module] or a successor module if module is found in the rules
    mapping. If successor is a function it will be called."
   [rules generation word state new-state new-index [index module]]
@@ -224,7 +373,7 @@
       (swap! new-index inc)
       [module])))
 
-(defn process
+#_(defn process
   "Returns new [word state] pair resulting from rewriting each module in the
    original word and updating the properties in state."
   [rules generation word state]
@@ -234,7 +383,7 @@
         new-word (doall (mapcat rewriter (map vector (range) word)))]
     [new-word @new-state]))
 
-(defn generate
+#_(defn generate
   "Returns a lazy sequence of [word state] pairs, where each subsequent word is
    the result of a rewrite derivation of the preceding word."
   [rules axiom]
@@ -243,7 +392,7 @@
         initial (process {:init axiom} @counter [:init] {})]
     (iterate genproc initial)))
 
-(defn gen
+#_(defn gen
   "Returns a lazy sequence of [word state] pairs for a grammar."
   [{:keys [axiom rules]}]
   (generate rules axiom))
@@ -255,14 +404,10 @@
   [(get word (dec index)) (get word (inc index))])
 
 
-(defn age [state index]
-  (inc (:age (get state index))))
-
-
 ; When a grammar produces an integer sequence it is named after its identifier
 ; from "The On-Line Encyclopedia of Integer Sequences" https://oeis.org/
 
-(def grammar
+#_(def grammar
   {:A003849 ; Fibonacci sequence
    {:axiom [0]
     :rules {0 [0 1]
