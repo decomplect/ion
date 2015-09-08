@@ -44,21 +44,20 @@
    growth and branching of plants, morphogenesis, crystallography, and more.
 
    To fully support more advanced processing, this implementation allows
-   optional state data to be associated with each module. It also allows rules
+   optional parameters to be associated with each module. It also allows rules
    to be expressed using functions. If a rule's replacement value is a function
-   it will be called and passed a set of arguments that can be used to
-   calculate the successor module(s) (and, optionally, data) to be returned by
-   the function. To associate state data with a module, a successor module must
+   it will be called and may be passed arguments that can be used to calculate
+   the successor module(s) (and, optionally, data) to be returned by the
+   function. To associate parameter data with a module, a successor module must
    be a 2-element list where the first element is the module and the second
-   element is anything, though it would usually be a map containing property
-   values.
+   element is anything, though it would usually be a map containing parameter
+   keys and values.
 
-   During the processing of productions, any optional module state data is
-   stored in a map using a key that is the index position of the module in the
-   word. Each generation of a system is therefore represented by a [word,
-   state] pair, where state is a map containing the optional data for the word
-   sequence. If a grammar does not make use of state data, the state in each
-   [word, state] pair will simply be an empty map."
+   During the processing of a parametric system, any optional module
+   parameters are stored in a map associated with a key that is the index
+   position of the module in the word. Each generation of a system can
+   therefore be represented by a [word, data] pair, where data is a map
+   containing the optional parametric data for the word sequence."
 
   (:require #?(:clj  [clojure.test :refer [deftest is testing]]
                :cljs [cljs.test :refer-macros [deftest is testing]])))
@@ -71,21 +70,22 @@
   "Minimal working examples of deterministic, context-free rewriting systems
    are illustrated here. The remainder of the code in this file is a result of
    the requirements for context-sensitive, parametric and stochastic systems.
-   The breakthrough is to view these as recursive axiomatic transducible
-   processes."
+
+   The breakthrough insight is to view an L-system as a specialized type of
+   recursive axiomatic transducible (RAT) process."
 
   (def axiom [0])
 
   (def rules {0 [0 1]
               1 [0]})
 
-  (defn minimal-working-system
+  (defn minimal-working-system-a
     [rules axiom]
     (iterate #(apply concat (replace rules %)) (seq axiom)))
 
-  (take 20 (minimal-working-system rules axiom))
+  (take 20 (minimal-working-system-a rules axiom))
 
-  (count (nth (minimal-working-system rules axiom) 35)) ; 24157817
+  (count (nth (minimal-working-system-a rules axiom) 35)) ; 24157817
 
   (defn minimal-working-system-b
     [rules axiom]
@@ -95,50 +95,7 @@
 
 
 ; -----------------------------------------------------------------------------
-; Transducers and Supporting Functions
-
-(defn rewrite
-  "Returns [m] or a successor if m is found in the rules mapping."
-  [rules m]
-  (or (rules m) [m]))
-
-(defn rewrite-indexed
-  "Returns [i m [m]] or [i m [successors]] if m is found in the rules mapping."
-  [rules [i m]]
-  [i m (or (rules m) [m])])
-
-
-(deftest rewrite-test
-  (let [rules {:A [:B :A :B]}]
-    (is (= (rewrite rules :A) [:B :A :B]))
-    (is (= (rewrite rules :B) [:B]))
-    (is (= (rewrite rules :C) [:C]))))
-
-
-(defn call-without-arguments
-  "Return successor or the result of calling successor."
-  [successor]
-  (if (fn? successor) (successor) successor))
-
-#_(defn call-with-arguments
-  "Return successor or the result of calling successor with arguments."
-  [successor & more]
-  (if (fn? successor) (apply successor more) successor))
-
-(defn call-with-arguments-xform
-  "Returns a transducer that will call any function with arguments."
-  [& more]
-  (map #(if (fn? %) (apply % more) %)))
-
-#_(defn split-module-params
-  "Returns a transducer that will split a list into a module and its parameters."
-  []
-  (let [new-index 0]
-    (map (fn [i m ms] ms))))
-
-
-; -----------------------------------------------------------------------------
-; Lindenmayer Systems
+; Shared Constants and Functions
 
 (def axiom-key ::axiom)
 
@@ -148,31 +105,37 @@
 
 (defn f-conj [& _] conj)
 
-(defn rewrite-xf
-  "Returns a rewrite rules transducer."
+(defn axiom-rules-merge
+  "Returns a merged rules map including the special axiom-key."
   [axiom rules]
-  (let [rules (merge {axiom-key axiom} rules)]
-    (map (partial rewrite rules))))
+  (merge {axiom-key axiom} rules))
+
+(defn rewrite-basic
+  "Returns [m] or a successor if m is found in the rules mapping."
+  [rules m]
+  (or (rules m) [m]))
+
+(defn rewrite-basic-rules
+  "Returns a rewrite rules function."
+  [axiom rules]
+  (partial rewrite-basic (axiom-rules-merge axiom rules)))
+
+
+; -----------------------------------------------------------------------------
+; Basic Rewriting
 
 (defn basic-rewriter
-  "Returns a function that will return a basic rewrite transducer."
+  "Returns a function that, when called, returns a basic rewrite transducer."
   ([axiom rules]
    (basic-rewriter axiom rules f-identity))
   ([axiom rules f-xf]
-   (fn [] (comp (rewrite-xf axiom rules) (f-xf) cat))))
+   (fn [] (comp (map (rewrite-basic-rules axiom rules)) (f-xf) cat))))
 
-(defn generational-rewriter
-  "Returns a function that will return a generational rewrite transducer."
-  ([axiom rules]
-   (generational-rewriter axiom rules f-identity))
-  ([axiom rules f-xf]
-   (fn [g] (comp (rewrite-xf axiom rules) (f-xf g) cat))))
-
-(defn basic-system
+(defn basic-process
   "Returns a lazy sequence of results from a recursive axiomatic transducible
    process."
   ([get-xf]
-   (basic-system get-xf f-conj))
+   (basic-process get-xf f-conj))
   ([get-xf get-rf]
    (letfn [(process [w]
                     (lazy-seq
@@ -181,11 +144,65 @@
                           (cons word (process word))))))]
      (process jumpstart))))
 
-(defn generational-system
-  "Returns a lazy sequence of results from a recursive axiomatic transducible
-   process."
+(defn basic-system
+  "Returns a lazy sequence of words from a basic rewriting process."
+  ([axiom rules]
+   (basic-process (basic-rewriter axiom rules)))
+  ([axiom rules f-xf]
+   (basic-process (basic-rewriter axiom rules f-xf))))
+
+
+; -----------------------------------------------------------------------------
+; Basic Functional Rewriting
+;
+; Extends the basic system by allowing rewrite successors to be functions that
+; get called without passing them any arguments.
+
+(defn call-without-arguments
+  "Return successor or the result of calling successor."
+  [successor]
+  (if (fn? successor) (successor) successor))
+
+(defn basic-functional-system
+  "Returns a lazy sequence of words from a basic rewriting process."
+  ([axiom rules]
+   (let [f-xf (fn [] (map call-without-arguments))]
+     (basic-system axiom rules f-xf)))
+  ([axiom rules f-xf]
+   (let [f-xf (fn [] (comp (map call-without-arguments) (f-xf)))]
+     (basic-system axiom rules f-xf))))
+
+
+; -----------------------------------------------------------------------------
+; Generational Rewriting
+;
+; Provides the current generation as an argument to allow the customization of:
+; a. the transducer returned by f-xf
+; b. the reducing function returned by f-rf
+; c. the module(s) returned by a successor when successor is a function
+
+(defn f-call-with-generation
+  "Returns a function that, when called, will return successor or the result
+   of calling successor with generation as an argument."
+  [g]
+  (fn [successor] (if (fn? successor) (successor g) successor)))
+
+(defn generational-rewriter
+  "Returns a function that, when called, returns a generational rewrite
+   transducer."
+  ([axiom rules]
+   (generational-rewriter axiom rules f-identity))
+  ([axiom rules f-xf]
+   (fn [g] (comp (map (rewrite-basic-rules axiom rules))
+                 (map (f-call-with-generation g))
+                 (f-xf g)
+                 cat))))
+
+(defn generational-process
+  "Returns a lazy sequence of results from a generational recursive axiomatic
+   transducible process."
   ([get-xf]
-   (generational-system get-xf f-conj))
+   (generational-process get-xf f-conj))
   ([get-xf get-rf]
    (letfn [(process [g w]
                     (lazy-seq
@@ -194,38 +211,100 @@
                           (cons word (process (inc g) word))))))]
      (process 0 jumpstart))))
 
-
-(deftest basic-system-test
-  (let [axiom [0]
-        rules {0 [0 1] 1 [0]}]
-    (is (= 144 (-> (basic-system (basic-rewriter axiom rules)) (nth 10) count)))))
-
-(deftest generational-system-test
-  (let [axiom [0]
-        rules {0 [0 1] 1 [0]}]
-    (is (= 144 (-> (generational-system (generational-rewriter axiom rules)) (nth 10) count)))))
-
-
-#_(defn rewrite-system
-  "Returns a lazy sequence of results from a recursive axiomatic transducible
-   process."
+(defn generational-system
+  "Returns a lazy sequence of words from a generational rewriting process."
   ([axiom rules]
-   (basic-system axiom rules (fn [_] identity)))
+   (generational-process (generational-rewriter axiom rules)))
   ([axiom rules f-xf]
-   (basic-system axiom rules f-xf (fn [_] conj)))
-  ([axiom rules f-xf f-rf]
-   (let [axiom-key ::axiom
-         rules (merge {axiom-key axiom} rules)
-         rewriter (map (partial rewrite rules))
-         start [axiom-key]
-         get-xf (fn [g] (comp rewriter (f-xf g) cat))
-         get-rf (fn [g] (f-rf g))]
-     (letfn [(process [g w]
-                      (lazy-seq
-                        (when (seq w)
-                          (let [word (transduce (get-xf g) (get-rf g) w)]
-                            (cons word (process (inc g) word))))))]
-       (process 0 start)))))
+   (generational-process (generational-rewriter axiom rules f-xf))))
+
+
+; -----------------------------------------------------------------------------
+; Parametric Rewriting
+;
+; Allows a successor item to be a 2-element list containing a module and
+; parameter data.
+
+(defn split-module-params-xf
+  "Returns a stateful transducer that accumulates a map of module parameters."
+  []
+  (fn [rf]
+    (let [data (volatile! {})
+          index (volatile! 0)]
+      (fn
+        ([] (rf))
+        ([result] (rf result @data))
+        ([result input]
+         (let [v (vec (for [[n, module] (map-indexed vector input)]
+                        (if (list? module)
+                          (let [[module param] module]
+                            (vswap! data assoc (+ @index n) param)
+                            module)
+                          module)))]
+           (vswap! index + (count v))
+           (rf result v)))))))
+
+(comment
+
+  (let [successor ['(:B {:color :Light-Blue})
+                   :-
+                   '(:A {:color :Red})
+                   :-
+                   '(:B {:color :Dark-Blue})]]
+    (transduce (split-module-params-xf) conj [successor]))
+
+  )
+
+#_(defn parametric-system
+  "Returns a lazy sequence of words from a parametric rewriting process."
+  ([axiom rules]
+   (parametric-process (parametric-rewriter axiom rules)))
+  ([axiom rules f-xf]
+   (parametric-process (parametric-rewriter axiom rules f-xf))))
+
+#_(defn parametric-system-example
+  []
+  (let [axiom ['(:A {:color :Red})]
+        rules {:A ['(:B {:color :Light-Blue})
+                   :-
+                   '(:A {:color :Red})
+                   :-
+                   '(:B {:color :Dark-Blue})]
+               :B ['(:A {:color :Dark-Red})
+                   :+
+                   (list :B {:color :Blue})
+                   :+
+                   '(:A {:color :Light-Red})]}]
+    (parametric-system axiom rules)))
+
+(comment (take 5 (parametric-system-example)))
+
+
+; -----------------------------------------------------------------------------
+; Contextual
+
+(defn rewrite-indexed
+  "Returns [i m [m]] or [i m [successors]] if m is found in the rules mapping."
+  [rules [i m]]
+  [i m (or (rules m) [m])])
+
+(defn rewrite-indexed-rules
+  "Returns a rewrite rules function for indexed modules."
+  [axiom rules]
+  (partial rewrite-indexed (axiom-rules-merge axiom rules)))
+
+(defn call-with-arguments-xform
+  "Returns a transducer that will call any function with arguments."
+  [& more]
+  (map (fn [successor] (if (fn? successor) (apply successor more) successor))))
+
+
+#_(defn call-with-arguments
+    "Return successor or the result of calling successor with arguments."
+    [successor & more]
+    (if (fn? successor) (apply successor more) successor))
+
+
 
 #_(defn contextual-parametric-system
   "Returns a lazy sequence of results from a recursive axiomatic transducible
@@ -265,7 +344,7 @@
 ; -----------------------------------------------------------------------------
 ; Example Systems
 
-#_(defn contextual-parametric-system-example-0
+#_(defn parametric-system-example
   []
   (let [axiom ['(:A {:color :Red})]
         rules {:A ['(:B {:color :Light-Blue})
@@ -278,12 +357,12 @@
                    (list :B {:color :Blue})
                    :+
                    '(:A {:color :Light-Red})]}]
-    (contextual-parametric-system axiom rules)))
+    (parametric-system axiom rules)))
 
-(comment (take 5 (contextual-parametric-system-example-0)))
+(comment (take 5 (parametric-system-example)))
 
 
-#_(defn contextual-parametric-system-example-1
+#_(defn contextual-parametric-system-example
   []
   (let [axiom ['(:A {:age 0})]
         rules {:A (fn [g w p i m]
@@ -301,7 +380,7 @@
         f-xf (fn [g] (comp (split-module-params) (call-with-arguments-xform g)))]
     (contextual-parametric-system axiom rules f-xf)))
 
-#_(comment (take 5 (contextual-parametric-system-example-1)))
+(comment (take 5 (contextual-parametric-system-example)))
 
 
 (defn fibonacci-sequence-basic
@@ -310,7 +389,7 @@
   (let [axiom [0]
         rules {0 [0 1]
                1 [0]}]
-    (basic-system (basic-rewriter axiom rules))))
+    (basic-system axiom rules)))
 
 (deftest fibonacci-sequence-basic-test
   (is (= 144 (-> (fibonacci-sequence-basic) (nth 10) count))))
@@ -379,7 +458,7 @@
   [rules generation word state]
   (let [new-state (atom {})
         new-index (atom 0)
-        rewriter (partial rewrite rules generation word state new-state new-index)
+        rewriter (partial rewrite-basic rules generation word state new-state new-index)
         new-word (doall (mapcat rewriter (map vector (range) word)))]
     [new-word @new-state]))
 
