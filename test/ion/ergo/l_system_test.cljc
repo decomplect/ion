@@ -18,7 +18,7 @@
 (deftest basic-functional-system-test
   (let [axiom #(vec [(rand-int 2)])
         rules {0 [0 1] 1 [0]}
-        system (basic-functional-system axiom rules)
+        system (functional-system axiom rules)
         size (-> system (nth 10) count)]
     (is (or (= 89 size) (= 144 size)))))
 
