@@ -15,7 +15,7 @@
         system (basic-system axiom rules)]
     (is (= 144 (-> system (nth 10) count)))))
 
-(deftest basic-functional-system-test
+(deftest functional-system-test
   (let [axiom #(vec [(rand-int 2)])
         rules {0 [0 1] 1 [0]}
         system (functional-system axiom rules)

@@ -159,17 +159,18 @@
 ; a function that get called (without passing it any arguments).
 
 (defn call-without-arguments
-  "Return successor or the result of calling successor."
-  [successor]
-  (if (fn? successor) (successor) successor))
+  "Returns a function that, when called, will return successor or the result
+   of calling successor."
+  []
+  (fn [successor] (if (fn? successor) (successor) successor)))
 
 (defn functional-rewriter
   "Returns a function that, when called, returns a rewriting transducer."
   ([axiom rules]
-   (let [f-xf (fn [] (map call-without-arguments))]
+   (let [f-xf (fn [] (map (call-without-arguments)))]
      (basic-rewriter axiom rules f-xf)))
   ([axiom rules f-xf]
-   (let [f-xf (fn [] (comp (map call-without-arguments) (f-xf)))]
+   (let [f-xf (fn [] (comp (map (call-without-arguments)) (f-xf)))]
      (basic-rewriter axiom rules f-xf))))
 
 (defn functional-system
@@ -204,7 +205,7 @@
                           (cons word (process (inc g) word))))))]
      (process 0 jumpstart))))
 
-(defn f-call-with-generation
+(defn call-with-generation
   "Returns a function that, when called, will return successor or the result
    of calling successor with generation as an argument."
   [g]
@@ -217,7 +218,7 @@
    (generational-rewriter axiom rules f-identity))
   ([axiom rules f-xf]
    (fn [g] (comp (map (rewrite-basic-rules axiom rules))
-                 (map (f-call-with-generation g))
+                 (map (call-with-generation g))
                  (f-xf g)
                  cat))))
 
@@ -253,9 +254,11 @@
                           (cons [word data] (process word data))))))]
      (process jumpstart {}))))
 
-(defn split-module-params-xf
-  "Returns a stateful transducer that accumulates a map of module parameters,
-   where the key is the index position of the module in the resulting word."
+(defn split-module-parameters
+  "Returns a stateful transducer that builds a map of module parameters, where
+   each key is the index position of the module in the resulting word. Must
+   appear in the transducing processs after any transducers that could filter
+   out modules, so that the data index remains valid."
   []
   (fn [rf]
     (let [data (volatile! {})
@@ -264,9 +267,9 @@
         ([] (rf))
         ([result] (rf result [@data]))
         ([result input]
-         (let [v (vec (for [[n, module] (map-indexed vector input)]
+         (let [v (vec (for [[n, module] (map-indexed vector input)]  ; use mapv?
                         (if (list? module)
-                          (let [[module param] module]
+                          (let [[module param] module]  ; use reduce or loop/recur
                             (vswap! data assoc (+ @index n) param)
                             module)
                           module)))]
@@ -276,10 +279,11 @@
 (defn parametric-rewriter
   "Returns a function that, when called, returns a rewriting transducer."
   ([axiom rules]
-   (let [f-xf split-module-params-xf]
+   (let [f-xf split-module-parameters]
      (basic-rewriter axiom rules f-xf)))
   ([axiom rules f-xf]
-   (let [f-xf (fn [] (comp (split-module-params-xf) (f-xf)))]
+   (let [f-xf (fn [] (comp (f-xf)
+                           (split-module-parameters)))]
      (basic-rewriter axiom rules f-xf))))
 
 (defn parametric-system
@@ -302,12 +306,12 @@
   "Returns a function that, when called, returns a rewriting transducer."
   ([axiom rules]
    (let [f-xf (fn [] (comp (map call-without-arguments)
-                           (split-module-params-xf)))]
+                           (split-module-parameters)))]
      (basic-rewriter axiom rules f-xf)))
   ([axiom rules f-xf]
    (let [f-xf (fn [] (comp (map call-without-arguments)
-                           (split-module-params-xf)
-                           (f-xf)))]
+                           (f-xf)
+                           (split-module-parameters)))]
      (basic-rewriter axiom rules f-xf))))
 
 (defn parametric-functional-system
@@ -347,9 +351,9 @@
    (parametric-generational-rewriter axiom rules f-identity))
   ([axiom rules f-xf]
    (fn [g] (comp (map (rewrite-basic-rules axiom rules))
-                 (map (f-call-with-generation g))
-                 (split-module-params-xf)
+                 (map (call-with-generation g))
                  (f-xf g)
+                 (split-module-parameters)
                  cat))))
 
 (defn parametric-generational-system
@@ -391,7 +395,7 @@
   [axiom rules]
   (partial rewrite-indexed (merge-axiom-rules axiom rules)))
 
-(defn f-call-with-context
+(defn call-with-context
   "Returns a function that, when called, will return successor or the result
    of calling successor with generation, word, index and module as arguments."
   [g w]
@@ -405,7 +409,7 @@
   ([axiom rules f-xf]
    (fn [g w]
      (comp (map (rewrite-indexed-rules axiom rules))
-           (map (f-call-with-context g w))
+           (map (call-with-context g w))
            (f-xf g w)
            cat))))
 
@@ -437,7 +441,7 @@
                           (cons [word data] (process (inc g) word data))))))]
      (process 0 jumpstart {}))))
 
-(defn f-call-with-parametric-context
+(defn call-with-parametric-context
   "Returns a function that, when called, will return successor or the result
    of calling successor with generation, word, data, index and module as
    arguments."
@@ -452,9 +456,9 @@
   ([axiom rules f-xf]
    (fn [g w d]
      (comp (map (rewrite-indexed-rules axiom rules))
-           (map (f-call-with-parametric-context g w d))
-           (split-module-params-xf)
+           (map (call-with-parametric-context g w d))
            (f-xf g w d)
+           (split-module-parameters)
            cat))))
 
 (defn parametric-contextual-system
@@ -471,10 +475,19 @@
 ; -----------------------------------------------------------------------------
 ; Helper Functions
 
-(defn age [data index]
-  (-> data (get index) :age inc))
+(declare grammarpedia)
 
-#_(defn neighbors
+(defn grammar
+  [key]
+  (let [gramm (key grammarpedia)]
+    [(:axiom gramm) (:rules gramm)]))
+
+(defn age
+  "Returns the age parameter value for the module at index."
+  [data index]
+  (-> data (get index) :age))
+
+(defn neighbors
     "Returns a vector of left / right neighbor values."
     [word index]
     [(get word (dec index)) (get word (inc index))])
@@ -486,10 +499,7 @@
 (defn basic-fibonacci-sequence
   "Returns a lazy sequence of vectors of Fibonacci integers - OEIS A003849."
   []
-  (let [axiom [0]
-        rules {0 [0 1]
-               1 [0]}]
-    (basic-system axiom rules)))
+  (apply basic-system (grammar :A003849)))
 
 (deftest fibonacci-sequence-basic-test
   (is (= 144 (-> (basic-fibonacci-sequence) (nth 10) count))))
@@ -558,13 +568,13 @@
         rules {:A (fn [g w d i m]
                     ['(:B {:age 0})
                      :-
-                     (list m {:age (age d i)})
+                     (list m {:age (inc (age d i))})
                      :-
                      '(:B {:age 0})])
                :B (fn [g w d i m]
                     ['(:A {:age 0})
                      :+
-                     (list m {:age (age d i)})
+                     (list m {:age (inc (age d i))})
                      :+
                      '(:A {:age 0})])}]
     (parametric-contextual-system axiom rules)))
@@ -573,52 +583,57 @@
 
 
 ; -----------------------------------------------------------------------------
-; Grammars
+; Grammarpedia
 
-; When a grammar produces an integer sequence it is named after its identifier
+; When a grammar produces an integer sequence, it is named after its identifier
 ; from "The On-Line Encyclopedia of Integer Sequences" https://oeis.org/
 
-(def grammar
-  {:A003849 ; Fibonacci sequence
-   {:axiom [0]
+(def grammarpedia
+  {:A003849
+   {:descr "Fibonacci sequence, beginning with zero"
+    :axiom [0]
     :rules {0 [0 1]
             1 [0]}}
-   ;:A005614 ; Fibonacci sequence
-   ;{:axiom [1]
-   ; :rules {0 [1]
-   ;         1 [1 0]}}
-   :A010060 ; Thue-Morse sequence
-   {:axiom [0]
+   :A005614
+   {:descr "Fibonacci sequence, beginning with one"
+    :axiom [1]
+    :rules {0 [1]
+            1 [1 0]}}
+   :A010060
+   {:descr "Thue-Morse sequence"
+    :axiom [0]
     :rules {0 [0 1]
             1 [1 0]}}
-   :A014577 ; Dragon-curve sequence
-   {:axiom [:L]
+   :A014577
+   {:descr "Dragon-curve sequence"
+    :axiom [:L]
     :rules {:L [:L :1 :R]
             :R [:L :0 :R]}}
-   :A026465 ; Length of n-th run of identical symbols in the Thue-Morse sequence A010060
-   {:axiom [1]
+   :A026465
+   {:descr "Length of n-th run of identical symbols in the Thue-Morse sequence A010060"
+    :axiom [1]
     :rules {1 [1 2 1]
             2 [1 2 2 2 1]}}
-   :A029883 ; First differences of Thue-Morse sequence A001285
-   {:axiom [1]
+   :A029883
+   {:descr "First differences of Thue-Morse sequence A001285"
+    :axiom [1]
     :rules {1 [1 0 -1]
             0 [1 -1]
             -1 [0]}}
-   :A036577 ; Ternary Thue-Morse sequence
-   {:axiom [2]
+   :A036577
+   {:descr "Ternary Thue-Morse sequence"
+    :axiom [2]
     :rules {0 [1]
             1 [2 0]
             2 [2 1 0]}}
    :A166253
-   {:axiom [1]
+   {:descr "A166253"
+    :axiom [1]
     :rules {0 [0 1 1 1 0]
             1 [1 0 0 0 1]}}
-   :template
-   {:axiom [0]
-    :rules {0 []
-            1 []}}
    :Rudin-Shapiro-sequence
-   {:axiom [:AA]
+   {:descr "Rudin-Shapiro sequence"
+    :axiom [:AA]
     :rules {:AA [:AA :AB]
             :AB [:AA :BA]
             :BA [:BB :AB]
