@@ -507,6 +507,22 @@
     (functional-system axiom rules)))
 
 
+(defn changing-rules-sequence
+  "Returns a lazy sequence of integers."
+  []
+  (let [axiom [0]
+        rules (fn [g]
+                (merge
+                  {(- g 3) []
+                   (- g 2) [99]}
+                  {0 [0 1 2 3]
+                   1 []
+                   2 [0]
+                   3 [1 2 3 4]
+                   4 [g]}))]
+    (basic-system axiom rules)))
+
+
 (defn generational-sequence
   "Returns a lazy sequence of integers."
   []
@@ -531,6 +547,7 @@
 (comment
   (take 5 (basic-fibonacci-sequence))
   (take 5 (stochastic-fibonacci-sequence))
+  (take 5 (changing-rules-sequence))
   (take 5 (generational-sequence))
   (take 5 (stochastic-generational-sequence))
   )
