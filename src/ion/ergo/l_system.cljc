@@ -103,8 +103,6 @@
 
 (defn f-identity [& _] identity)
 
-(defn f-conj [& _] conj)
-
 
 ; -----------------------------------------------------------------------------
 ; Rewriting Processes
@@ -112,62 +110,52 @@
 (defn basic-process
   "Returns a lazy sequence of words from a recursive axiomatic transducible
    process."
-  ([get-xf]
-   (basic-process get-xf f-conj))
-  ([get-xf get-rf]
-   (letfn [(process [w]
-                    (lazy-seq
-                      (when (seq w)
-                        (let [word (transduce (get-xf) (get-rf) w)]
-                          (cons word (process word))))))]
-     (process jumpstart))))
+  [get-xf]
+  (letfn [(process [w]
+                   (lazy-seq
+                     (when (seq w)
+                       (let [word (into [] (get-xf) w)]
+                         (cons word (process word))))))]
+    (process jumpstart)))
 
 (defn parametric-process
   "Returns a lazy sequence of [word data] pairs from a parametric recursive
    axiomatic transducible process."
-  ([get-xf]
-   (parametric-process get-xf f-conj))
-  ([get-xf get-rf]
-   (letfn [(process [w d]
-                    (lazy-seq
-                      (when (seq w)
-                        (let [result (transduce (get-xf) (get-rf) w)
-                              word (butlast result)
-                              data (peek result)]
-                          (cons [word data] (process word data))))))]
-     (process jumpstart {}))))
+  [get-xf]
+  (letfn [(process [w d]
+                   (lazy-seq
+                     (when (seq w)
+                       (let [temp (into [] (get-xf) w)
+                             word (butlast temp)
+                             data (peek temp)]
+                         (cons [word data] (process word data))))))]
+    (process jumpstart {})))
 
 (defn contextual-process
   "Returns a lazy sequence of words from a contextual recursive axiomatic
    transducible process."
-  ([get-xf]
-   (contextual-process get-xf f-conj))
-  ([get-xf get-rf]
-   (letfn [(process [w]
-                    (lazy-seq
-                      (when (seq w)
-                        (let [word (transduce (get-xf w)
-                                              (get-rf)
-                                              (map-indexed vector w))]
-                          (cons word (process word))))))]
-     (process jumpstart))))
+  [get-xf]
+  (letfn [(process [w]
+                   (lazy-seq
+                     (when (seq w)
+                       (let [w-in (map-indexed vector w)
+                             word (into [] (get-xf w) w-in)]
+                         (cons word (process word))))))]
+    (process jumpstart)))
 
 (defn parametric-contextual-process
   "Returns a lazy sequence of [word data] pairs from a parametric-contextual
    recursive axiomatic transducible process."
-  ([get-xf]
-   (parametric-contextual-process get-xf f-conj))
-  ([get-xf get-rf]
-   (letfn [(process [w d]
-                    (lazy-seq
-                      (when (seq w)
-                        (let [result (transduce (get-xf w d)
-                                                (get-rf)
-                                                (map-indexed vector w))
-                              word (butlast result)
-                              data (peek result)]
-                          (cons [word data] (process word data))))))]
-     (process jumpstart {}))))
+  [get-xf]
+  (letfn [(process [w d]
+                   (lazy-seq
+                     (when (seq w)
+                       (let [w-in (map-indexed vector w)
+                             temp (into [] (get-xf w d) w-in)
+                             word (butlast temp)
+                             data (peek temp)]
+                         (cons [word data] (process word data))))))]
+    (process jumpstart {})))
 
 
 ; -----------------------------------------------------------------------------
@@ -392,7 +380,7 @@
 
 
 ; -----------------------------------------------------------------------------
-; Rewriting Systems (in increasing order of complexity/sophistication/power)
+; Rewriting Systems (in order of increasing complexity/sophistication/power)
 
 (defn basic-system
   "Returns a lazy sequence of words from a basic rewriting process."
