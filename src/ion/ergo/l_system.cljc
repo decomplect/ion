@@ -101,15 +101,13 @@
 
 (def jumpstart [axiom-key])
 
-(defn f-identity [& _] identity)
-
 
 ; -----------------------------------------------------------------------------
 ; Rewriting Processes
 
-(defn basic-process
-  "Returns a lazy sequence of words from a recursive axiomatic transducible
-   process."
+(defn context-free-process
+  "Returns a lazy sequence of words from a context-free recursive axiomatic
+   transducible process."
   [get-xf]
   (letfn [(process [w]
                    (lazy-seq
@@ -117,19 +115,6 @@
                        (let [word (into [] (get-xf) w)]
                          (cons word (process word))))))]
     (process jumpstart)))
-
-(defn parametric-process
-  "Returns a lazy sequence of [word data] pairs from a parametric recursive
-   axiomatic transducible process."
-  [get-xf]
-  (letfn [(process [w d]
-                   (lazy-seq
-                     (when (seq w)
-                       (let [temp (into [] (get-xf) w)
-                             word (butlast temp)
-                             data (peek temp)]
-                         (cons [word data] (process word data))))))]
-    (process jumpstart {})))
 
 (defn contextual-process
   "Returns a lazy sequence of words from a contextual recursive axiomatic
@@ -143,8 +128,21 @@
                          (cons word (process word))))))]
     (process jumpstart)))
 
+(defn parametric-context-free-process
+  "Returns a lazy sequence of [word data] pairs from a parametric context-free
+   recursive axiomatic transducible process."
+  [get-xf]
+  (letfn [(process [w]
+                   (lazy-seq
+                     (when (seq w)
+                       (let [temp (into [] (get-xf) w)
+                             word (butlast temp)
+                             data (peek temp)]
+                         (cons [word data] (process word))))))]
+    (process jumpstart)))
+
 (defn parametric-contextual-process
-  "Returns a lazy sequence of [word data] pairs from a parametric-contextual
+  "Returns a lazy sequence of [word data] pairs from a parametric contextual
    recursive axiomatic transducible process."
   [get-xf]
   (letfn [(process [w d]
@@ -159,96 +157,52 @@
 
 
 ; -----------------------------------------------------------------------------
-; Rewrite Functions
+; Transformation Functions
 
-(defn rewrite-basic
+(defn rewrite-module
   "Returns [m] or successors if m is found in the rules mapping."
   [rules m]
   (or (rules m) [m]))
 
-(defn rewrite-indexed
+(defn rewrite-module-with-context
   "Returns [i m [m]] or [i m [successors]] if m is found in the rules mapping."
   [rules [i m]]
   [i m (or (rules m) [m])])
 
+(defn rules-for-gen
+  "Return rules for generation, calling any rules written as functions."
+  [axiom rules g]
+  (if (= 0 g)
+    {axiom-key axiom}
+    (if (fn? rules) (rules g) rules)))
 
-; -----------------------------------------------------------------------------
-; Basic Rewriting
+(defn rewrite
+  "Returns a context-free rewriting transducer."
+  [axiom rules g]
+  (map (partial rewrite-module (rules-for-gen axiom rules g))))
 
-(defn basic-rewriter
-  "Returns a function that, when called, returns a basic rewriting transducer."
-  ([axiom rules]
-   (basic-rewriter axiom rules f-identity))
-  ([axiom rules f-xf]
-   (let [generation (volatile! -1)
-         gen0-rules {axiom-key axiom}]
-     (fn []
-       (vswap! generation inc)
-       (let [r (if (= 0 @generation)
-                 gen0-rules
-                 (if (fn? rules) (rules @generation) rules))]
-         (comp (map (partial rewrite-basic r))
-               (f-xf @generation)
-               cat))))))
+(defn rewrite-with-context
+  "Returns a contextual rewriting transducer."
+  [axiom rules g]
+  (map (partial rewrite-module-with-context (rules-for-gen axiom rules g))))
 
-
-; -----------------------------------------------------------------------------
-; Functional Rewriting
-;
-; Extends the basic system by allowing a rewrite successor to (optionally) be
-; a function that get called (without passing it any arguments).
-
-(defn call-without-arguments
+(defn call-without-context
   "Returns a function that, when called, will return successor or the result
    of calling successor."
   []
   (fn [successor] (if (fn? successor) (successor) successor)))
 
-(defn functional-rewriter
-  "Returns a function that, when called, returns a rewriting transducer."
-  ([axiom rules]
-   (let [f-xf (fn [_] (map (call-without-arguments)))]
-     (basic-rewriter axiom rules f-xf)))
-  ([axiom rules f-xf]
-   (let [f-xf (fn [g] (comp (map (call-without-arguments)) (f-xf g)))]
-     (basic-rewriter axiom rules f-xf))))
-
-
-; -----------------------------------------------------------------------------
-; Generational Rewriting
-;
-; Extends the functional system by supplying the generation as basic context.
-;
-; Provides the current generation as an argument to allow the customization of:
-; a. the module(s) returned by (successor g) when successor is a function
-; b. the function returned by (call-with-generation g)
-; c. the transducer returned by (f-xf g)
-
-(defn call-with-generation
+(defn call-with-context
   "Returns a function that, when called, will return successor or the result
-   of calling successor with generation as an argument."
-  [g]
-  (fn [successor] (if (fn? successor) (successor g) successor)))
+   of calling successor with generation, word, index and module args."
+  [g w]
+  (fn [[i m successor]] (if (fn? successor) (successor g w i m) successor)))
 
-(defn generational-rewriter
-  "Returns a function that, when called, returns a generational rewriting
-   transducer."
-  ([axiom rules]
-   (let [f-xf (fn [g] (map (call-with-generation g)))]
-     (basic-rewriter axiom rules f-xf)))
-  ([axiom rules f-xf]
-   (let [f-xf (fn [g] (comp (map (call-with-generation g)) (f-xf g)))]
-     (basic-rewriter axiom rules f-xf))))
-
-
-; -----------------------------------------------------------------------------
-; Parametric Rewriting
-;
-; Allows a successor item to be a 2-element list containing a module and its
-; parameters. Parameters would typically be stored in a map.
-;
-; Fundamentally alters the shape of the data coming out of the system from a
-; sequence of words to a sequence of [word data] pairs.
+(defn call-with-parametric-context
+  "Returns a function that, when called, will return successor or the result
+   of calling successor with generation, word, data, index and module args."
+  [g w d]
+  (fn [[i m successor]] (if (fn? successor) (successor g w d i m) successor)))
 
 (defn split-module-parameters
   "Returns a stateful transducer that builds a map of module parameters, where
@@ -272,111 +226,32 @@
            (vswap! index + (count v))
            (rf result v)))))))
 
-(defn parametric-rewriter
-  "Returns a function that, when called, returns a rewriting transducer."
-  ([axiom rules]
-   (let [f-xf (fn [_] (split-module-parameters))]
-     (basic-rewriter axiom rules f-xf)))
-  ([axiom rules f-xf]
-   (let [f-xf (fn [g] (comp (f-xf g)
-                            (split-module-parameters)))]
-     (basic-rewriter axiom rules f-xf))))
+(defn gen
+  "Returns a function that, when called, will call f with an incremented
+   generation value."
+  [f]
+  (let [generation (volatile! -1)]
+    (fn []
+      (vswap! generation inc)
+      (f @generation))))
 
+(defn gen-word
+  "Returns a function that, when called, will call f with an incremented
+   generation value and word."
+  [f]
+  (let [generation (volatile! -1)]
+    (fn [word]
+      (vswap! generation inc)
+      (f @generation word))))
 
-; -----------------------------------------------------------------------------
-; Parametric-Functional Rewriting
-;
-; Combines the features of the functional and parametric systems. In addition,
-; functions may return successors that include parametric data.
-
-(defn parametric-functional-rewriter
-  "Returns a function that, when called, returns a rewriting transducer."
-  ([axiom rules]
-   (let [f-xf (fn [_] (comp (map call-without-arguments)
-                            (split-module-parameters)))]
-     (basic-rewriter axiom rules f-xf)))
-  ([axiom rules f-xf]
-   (let [f-xf (fn [g] (comp (map call-without-arguments)
-                            (f-xf g)
-                            (split-module-parameters)))]
-     (basic-rewriter axiom rules f-xf))))
-
-
-; -----------------------------------------------------------------------------
-; Parametric-Generational Rewriting
-;
-; Combines the features of the generational and parametric systems.
-
-(defn parametric-generational-rewriter
-  "Returns a function that, when called, returns a parametric-generational
-   rewriting transducer."
-  ([axiom rules]
-   (let [f-xf (fn [g] (comp (map call-with-generation g)
-                            (split-module-parameters)))]
-     (basic-rewriter axiom rules f-xf)))
-  ([axiom rules f-xf]
-   (let [f-xf (fn [g] (comp (map call-with-generation g)
-                            (f-xf g)
-                            (split-module-parameters)))]
-     (basic-rewriter axiom rules f-xf))))
-
-
-; -----------------------------------------------------------------------------
-; Contextual Rewriting
-
-(defn call-with-context
-  "Returns a function that, when called, will return successor or the result
-   of calling successor with generation, word, index and module as arguments."
-  [g w]
-  (fn [[i m successor]] (if (fn? successor) (successor g w i m) successor)))
-
-(defn contextual-rewriter
-  "Returns a function that, when called, returns a contextual rewriting
-   transducer."
-  ([axiom rules]
-   (contextual-rewriter axiom rules f-identity))
-  ([axiom rules f-xf]
-   (let [generation (volatile! -1)
-         gen0-rules {axiom-key axiom}]
-     (fn [w]
-       (vswap! generation inc)
-       (let [r (if (= 0 @generation)
-                 gen0-rules
-                 (if (fn? rules) (rules @generation) rules))]
-         (comp (map (partial rewrite-indexed r))
-               (map (call-with-context @generation w))
-               (f-xf @generation w)
-               cat))))))
-
-
-; -----------------------------------------------------------------------------
-; Parametric-Contextual Rewriting
-
-(defn call-with-parametric-context
-  "Returns a function that, when called, will return successor or the result
-   of calling successor with generation, word, data, index and module as
-   arguments."
-  [g w d]
-  (fn [[i m successor]] (if (fn? successor) (successor g w d i m) successor)))
-
-(defn parametric-contextual-rewriter
-  "Returns a function that, when called, returns a parametric-contextual
-   rewriting transducer."
-  ([axiom rules]
-   (parametric-contextual-rewriter axiom rules f-identity))
-  ([axiom rules f-xf]
-   (let [generation (volatile! -1)
-         gen0-rules {axiom-key axiom}]
-     (fn [w d]
-       (vswap! generation inc)
-       (let [r (if (= 0 @generation)
-                 gen0-rules
-                 (if (fn? rules) (rules @generation) rules))]
-         (comp (map (partial rewrite-indexed r))
-               (map (call-with-parametric-context @generation w d))
-               (f-xf @generation w d)
-               (split-module-parameters)
-               cat))))))
+(defn gen-word-data
+  "Returns a function that, when called, will call f with an incremented
+   generation value, word and data."
+  [f]
+  (let [generation (volatile! -1)]
+    (fn [word data]
+      (vswap! generation inc)
+      (f @generation word data))))
 
 
 ; -----------------------------------------------------------------------------
@@ -384,36 +259,54 @@
 
 (defn basic-system
   "Returns a lazy sequence of words from a basic rewriting process."
-  ([axiom rules]
-   (basic-process (basic-rewriter axiom rules)))
-  ([axiom rules f-xf]
-   (basic-process (basic-rewriter axiom rules f-xf))))
+  [axiom rules]
+  (let [f-xf (gen (fn [g] (comp (rewrite axiom rules g)
+                                cat)))]
+    (context-free-process f-xf)))
+
+
+; -----------------------------------------------------------------------------
+; Functional System
+;
+; Extends the basic system by allowing a rewrite successor to (optionally) be
+; a function that get called (without passing it any arguments).
 
 (defn functional-system
   "Returns a lazy sequence of words from a rewriting process that allows a
    rewrite successor to (optionally) be a function that get called (without
    passing it any arguments)."
-  ([axiom rules]
-   (basic-process (functional-rewriter axiom rules)))
-  ([axiom rules f-xf]
-   (basic-process (functional-rewriter axiom rules f-xf))))
+  [axiom rules]
+  (let [f-xf (gen (fn [g] (comp (rewrite axiom rules g)
+                                (map (call-without-context))
+                                cat)))]
+    (context-free-process f-xf)))
 
-(defn generational-system
-  "Returns a lazy sequence of words from a generational rewriting process.
-   Calls any successor functions passing the generation as an argument."
-  ([axiom rules]
-   (basic-process (generational-rewriter axiom rules)))
-  ([axiom rules f-xf]
-   (basic-process (generational-rewriter axiom rules f-xf))))
+
+; -----------------------------------------------------------------------------
+; Parametric System
+;
+; Allows a successor item to be a 2-element list containing a module and its
+; parameters. Parameters would typically be stored in a map.
+;
+; Fundamentally alters the shape of the data coming out of the system from a
+; sequence of words to a sequence of [word data] pairs.
 
 (defn parametric-system
   "Returns a lazy sequence of [word data] pairs from a rewriting process,
    where word is a seq of modules and data is a map of module parameters keyed
    on the index value of the module's position in the word."
-  ([axiom rules]
-   (parametric-process (parametric-rewriter axiom rules)))
-  ([axiom rules f-xf]
-   (parametric-process (parametric-rewriter axiom rules f-xf))))
+  [axiom rules]
+  (let [f-xf (gen (fn [g] (comp (rewrite axiom rules g)
+                                (split-module-parameters)
+                                cat)))]
+    (parametric-context-free-process f-xf)))
+
+
+; -----------------------------------------------------------------------------
+; Parametric-Functional System
+;
+; Combines the features of the functional and parametric systems. In addition,
+; functions may return successors that include parametric data.
 
 (defn parametric-functional-system
   "Returns a lazy sequence of [word data] pairs from a rewriting process,
@@ -421,35 +314,40 @@
    on the index value of the module's position in the word. Calls any successor
    functions without arguments, which may return successors that include
    parametric data."
-  ([axiom rules]
-   (parametric-process (parametric-functional-rewriter axiom rules)))
-  ([axiom rules f-xf]
-   (parametric-process (parametric-functional-rewriter axiom rules f-xf))))
+  [axiom rules]
+  (let [f-xf (gen (fn [g] (comp (rewrite axiom rules g)
+                                (map (call-without-context))
+                                (split-module-parameters)
+                                cat)))]
+    (parametric-context-free-process f-xf)))
 
-(defn parametric-generational-system
-  "Returns a lazy sequence of [word data] pairs from a parametric-generational
-   rewriting process."
-  ([axiom rules]
-   (parametric-process (parametric-generational-rewriter axiom rules)))
-  ([axiom rules f-xf]
-   (parametric-process (parametric-generational-rewriter axiom rules f-xf))))
+
+; -----------------------------------------------------------------------------
+; Contextual System
 
 (defn contextual-system
   "Returns a lazy sequence of words from a contextual rewriting process."
-  ([axiom rules]
-   (contextual-process (contextual-rewriter axiom rules)))
-  ([axiom rules f-xf]
-   (contextual-process (contextual-rewriter axiom rules f-xf))))
+  [axiom rules]
+  (let [f-xf (gen-word (fn [g w]
+                         (comp (rewrite-with-context axiom rules g)
+                               (map (call-with-context g w))
+                               cat)))]
+    (contextual-process f-xf)))
+
+
+; -----------------------------------------------------------------------------
+; Parametric-Contextual System
 
 (defn parametric-contextual-system
   "Returns a lazy sequence of [word data] pairs from a parametric-contextual
    rewriting process."
-  ([axiom rules]
-   (parametric-contextual-process
-     (parametric-contextual-rewriter axiom rules)))
-  ([axiom rules f-xf]
-   (parametric-contextual-process
-     (parametric-contextual-rewriter axiom rules f-xf))))
+  [axiom rules]
+  (let [f-xf (gen-word-data (fn [g w d]
+                              (comp (rewrite-with-context axiom rules g)
+                                    (map (call-with-parametric-context g w d))
+                                    (split-module-parameters)
+                                    cat)))]
+    (parametric-contextual-process f-xf)))
 
 
 ; -----------------------------------------------------------------------------
@@ -495,6 +393,29 @@
     (functional-system axiom rules)))
 
 
+(defn generational-sequence
+  "Returns a lazy sequence of integers."
+  []
+  (let [axiom [0]
+        rules (fn [g]
+                {0 [0 g 1]
+                 1 []
+                 2 [0]
+                 3 [1 2 3 4]
+                 4 []})]
+    (basic-system axiom rules)))
+
+
+(defn stochastic-generational-sequence
+  "Returns a lazy sequence of semi-random integers."
+  []
+  (let [axiom [0]
+        rules (fn [g]
+                {0 [0 (rand-int (+ g 5)) 1]
+                 1 [0]})]
+    (basic-system axiom rules)))
+
+
 (defn changing-rules-sequence
   "Returns a lazy sequence of integers."
   []
@@ -509,27 +430,6 @@
                    3 [1 2 3 4]
                    4 [g]}))]
     (basic-system axiom rules)))
-
-
-(defn generational-sequence
-  "Returns a lazy sequence of integers."
-  []
-  (let [axiom [0]
-        rules {0 (fn [g] [0 g 1])
-               1 []
-               2 [0]
-               3 [1 2 3 4]
-               4 []}]
-    (generational-system axiom rules)))
-
-
-(defn stochastic-generational-sequence
-  "Returns a lazy sequence of semi-random integers."
-  []
-  (let [axiom [0]
-        rules {0 (fn [g] [0 (rand-int (+ g 5)) 1])
-               1 [0]}]
-    (generational-system axiom rules)))
 
 
 (comment
