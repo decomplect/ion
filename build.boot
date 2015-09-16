@@ -28,6 +28,7 @@
          (let [version "0.1.0-SNAPSHOT"]
            (bootlaces! version)
            (set-env!
+             :dependencies '[[criterium "0.4.3"]]
              :resource-paths #{"src/ion/ergo"})
            (task-options!
              pom {:project 'ion/logo

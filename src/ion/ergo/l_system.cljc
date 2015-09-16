@@ -2,19 +2,21 @@
   "Support for Lindenmayer systems: deterministic, stochastic, context-free,
    context-sensitive, or parametric. Or combinations thereof.
 
+   TL;DR How to produce recursive axiomatic transducible sequences (RATS)
+
    A somewhat confusing variety of terms are used to describe L-systems and
    their component parts, and this source code file is likely no exception. In
    order to be understood in the context of existing semiotics we have adhered
-   as closely as possible to the most commonly used terminology. In particular,
-   however, we avoid using the term \"String\" so as to avoid confusion with
-   the datatype of the same name. Instead we refer to that part of the system
-   as a \"Word\", although it should not be confused with the everyday notion
-   of a word in a spoken language. And while we avoid calling a Word a String,
-   a Word is often represented in an L-system by a `string`, although it
-   doesn't need to be (and isn't here). And a Word is a sequence of somethings.
-   For similar reasons we prefer to call those \"somethings\" Modules instead
-   of the other commonly used term \"Letters\". (And so begins the inevitable
-   confusion...)
+   as closely as possible to the most commonly used domain terminology in favor
+   of Clojure terminology. In particular, however, we avoid using the term
+   \"String\" so as to avoid confusion with the datatype of the same name.
+   Instead we refer to that part of the system as a \"Word\", although it
+   should not be confused with the everyday notion of a word in a spoken
+   language. And while we avoid calling a Word a String, a Word is often
+   represented in an L-system by a `string`, although it doesn't need to be
+   (and isn't here). And a Word is a sequence of somethings. For similar
+   reasons we prefer to call those \"somethings\" Modules instead of the other
+   commonly used term \"Letters\". (And so begins the inevitable confusion...)
 
    With that in mind, we describe an L-system as a parallel rewriting system.
    A rewriting system takes an intial input value made up of a sequence of one
@@ -41,26 +43,24 @@
    module, words tend to grow in size with each successive generation. And
    because this growth is recursive, L-systems are useful for modeling a
    variety of mathematical and natural processes such as: fractal geometry, the
-   growth and branching of plants, morphogenesis, crystallography, and more.
+   growth and branching of cells and plants, morphogenesis, crystallography,
+   architecture, caves, generated game content, and more.
 
    To fully support more advanced processing, this implementation allows
-   optional parameters to be associated with each module. It also allows rules
-   to be expressed using functions. If a rule's replacement value is a function
-   it will be called and may be passed arguments that can be used to calculate
-   the successor module(s) (and, optionally, data) to be returned by the
-   function. To associate parameter data with a module, a successor module must
-   be a 2-element list where the first element is the module and the second
-   element is anything, though it would usually be a map containing parameter
-   keys and values.
+   optional parameters to be associated with a module. It also allows rules to
+   be expressed using functions. If a rule's replacement value is a function it
+   will be called and can also be passed arguments for use in the
+   context-sensitive calculation of successor module(s) (and, optionally,
+   parameter data) to be returned by the function. To associate parameter data
+   with a module, a successor must be defined as 2-element list where the first
+   element is the module and the second element is an instance of any datatype,
+   though it would usually be a map containing parameter keys and values.
 
-   During the processing of a parametric system, any optional module
-   parameters are stored in a map associated with a key that is the index
-   position of the module in the word. Each generation of a system can
-   therefore be represented by a [word, data] pair, where data is a map
-   containing the optional parametric data for the word sequence."
-
-  (:require #?(:clj  [clojure.test :refer [deftest is testing]]
-               :cljs [cljs.test :refer-macros [deftest is testing]])))
+   During the processing of a parametric system, any optional module parameter
+   data is stored in a map associated by a key that is the index position of
+   the module in the resulting word. Each generation of a system is therefore
+   represented by a [word, data] pair, where data is a map containing the
+   optional parametric data for the word sequence.")
 
 
 ; -----------------------------------------------------------------------------
@@ -71,8 +71,8 @@
    are illustrated here. The remainder of the code in this file is a result of
    the requirements for context-sensitive, parametric and stochastic systems.
 
-   The breakthrough insight is to view an L-system as a specialized type of
-   recursive axiomatic transducible (RAT) process."
+   The breakthrough insight is to view L-systems as specialized types of
+   recursive axiomatic transducible sequences (RATS)."
 
   (def axiom [0])
 
@@ -95,7 +95,7 @@
 
 
 ; -----------------------------------------------------------------------------
-; Shared Constants and Functions
+; Shared Constants
 
 (def axiom-key ::axiom)
 
@@ -348,191 +348,3 @@
                                     (split-module-parameters)
                                     cat)))]
     (parametric-contextual-process f-xf)))
-
-
-; -----------------------------------------------------------------------------
-; Helper Functions
-
-(declare grammarpedia)
-
-(defn grammar
-  [key]
-  (let [gramm (key grammarpedia)]
-    [(:axiom gramm) (:rules gramm)]))
-
-(defn age
-  "Returns the age parameter value for the module at index."
-  [data index]
-  (-> data (get index) :age))
-
-(defn neighbors
-    "Returns a vector of left / right neighbor values."
-    [word index]
-    [(get word (dec index)) (get word (inc index))])
-
-
-; -----------------------------------------------------------------------------
-; Example Systems
-
-(defn basic-fibonacci-sequence
-  "Returns a lazy sequence of vectors of Fibonacci integers - OEIS A003849."
-  []
-  (apply basic-system (grammar :A003849)))
-
-(deftest fibonacci-sequence-basic-test
-  (is (= 144 (-> (basic-fibonacci-sequence) (nth 10) count))))
-
-
-(defn stochastic-fibonacci-sequence
-  "Returns a lazy sequence of vectors of Fibonacci integers starting randomly
-   with 0 or 1."
-  []
-  (let [axiom #(vec [(rand-int 2)])
-        rules {0 [0 1]
-               1 [0]}]
-    (functional-system axiom rules)))
-
-
-(defn generational-sequence
-  "Returns a lazy sequence of integers."
-  []
-  (let [axiom [0]
-        rules (fn [g]
-                {0 [0 g 1]
-                 1 []
-                 2 [0]
-                 3 [1 2 3 4]
-                 4 []})]
-    (basic-system axiom rules)))
-
-
-(defn stochastic-generational-sequence
-  "Returns a lazy sequence of semi-random integers."
-  []
-  (let [axiom [0]
-        rules (fn [g]
-                {0 [0 (rand-int (+ g 5)) 1]
-                 1 [0]})]
-    (basic-system axiom rules)))
-
-
-(defn changing-rules-sequence
-  "Returns a lazy sequence of integers."
-  []
-  (let [axiom [0]
-        rules (fn [g]
-                (merge
-                  {(- g 3) []
-                   (- g 2) [99]}
-                  {0 [0 1 2 3]
-                   1 []
-                   2 [0]
-                   3 [1 2 3 4]
-                   4 [g]}))]
-    (basic-system axiom rules)))
-
-
-(comment
-  (take 5 (basic-fibonacci-sequence))
-  (take 5 (stochastic-fibonacci-sequence))
-  (take 5 (changing-rules-sequence))
-  (take 5 (generational-sequence))
-  (take 5 (stochastic-generational-sequence))
-  )
-
-
-(defn parametric-system-example
-  []
-  (let [axiom ['(:A {:color :Red})]
-        rules {:A ['(:B {:color :Light-Blue})
-                   :-
-                   '(:A {:color :Red})
-                   :-
-                   '(:B {:color :Dark-Blue})]
-               :B ['(:A {:color :Dark-Red})
-                   :+
-                   (list :B {:color :Blue})
-                   :+
-                   '(:A {:color :Light-Red})]}]
-    (parametric-system axiom rules)))
-
-(comment (take 5 (parametric-system-example)))
-
-
-(defn parametric-contextual-system-example
-  []
-  (let [axiom ['(:A {:age 0})]
-        rules {:A (fn [g w d i m]
-                    ['(:B {:age 0})
-                     :-
-                     (list m {:age (inc (age d i))})
-                     :-
-                     '(:B {:age 0})])
-               :B (fn [g w d i m]
-                    ['(:A {:age 0})
-                     :+
-                     (list m {:age (inc (age d i))})
-                     :+
-                     '(:A {:age 0})])}]
-    (parametric-contextual-system axiom rules)))
-
-(comment (take 5 (parametric-contextual-system-example)))
-
-
-; -----------------------------------------------------------------------------
-; Grammarpedia
-
-; When a grammar produces an integer sequence, it is named after its identifier
-; from "The On-Line Encyclopedia of Integer Sequences" https://oeis.org/
-
-(def grammarpedia
-  {:A003849
-   {:descr "Fibonacci sequence, beginning with zero"
-    :axiom [0]
-    :rules {0 [0 1]
-            1 [0]}}
-   :A005614
-   {:descr "Fibonacci sequence, beginning with one"
-    :axiom [1]
-    :rules {0 [1]
-            1 [1 0]}}
-   :A010060
-   {:descr "Thue-Morse sequence"
-    :axiom [0]
-    :rules {0 [0 1]
-            1 [1 0]}}
-   :A014577
-   {:descr "Dragon-curve sequence"
-    :axiom [:L]
-    :rules {:L [:L :1 :R]
-            :R [:L :0 :R]}}
-   :A026465
-   {:descr "Length of n-th run of identical symbols in the Thue-Morse sequence A010060"
-    :axiom [1]
-    :rules {1 [1 2 1]
-            2 [1 2 2 2 1]}}
-   :A029883
-   {:descr "First differences of Thue-Morse sequence A001285"
-    :axiom [1]
-    :rules {1 [1 0 -1]
-            0 [1 -1]
-            -1 [0]}}
-   :A036577
-   {:descr "Ternary Thue-Morse sequence"
-    :axiom [2]
-    :rules {0 [1]
-            1 [2 0]
-            2 [2 1 0]}}
-   :A166253
-   {:descr "A166253"
-    :axiom [1]
-    :rules {0 [0 1 1 1 0]
-            1 [1 0 0 0 1]}}
-   :Rudin-Shapiro-sequence
-   {:descr "Rudin-Shapiro sequence"
-    :axiom [:AA]
-    :rules {:AA [:AA :AB]
-            :AB [:AA :BA]
-            :BA [:BB :AB]
-            :BB [:BB :BA]}}
-   })
