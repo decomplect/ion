@@ -212,19 +212,20 @@
   []
   (fn [rf]
     (let [data (volatile! {})
-          index (volatile! 0)]
+          index (volatile! 0)
+          split (fn [n successor]
+                  (if (list? successor)
+                    (do
+                      (vswap! data assoc (+ @index n) (last successor))
+                      (first successor))
+                    successor))]
       (fn
         ([] (rf))
         ([result] (rf result [@data]))
         ([result input]
-         (let [v (vec (for [[n, module] (map-indexed vector input)]  ; use mapv?
-                        (if (list? module)
-                          (let [[module param] module]  ; use reduce or loop/recur
-                            (vswap! data assoc (+ @index n) param)
-                            module)
-                          module)))]
-           (vswap! index + (count v))
-           (rf result v)))))))
+         (let [successor (into [] (map-indexed split input))]
+           (vswap! index + (count successor))
+           (rf result successor)))))))
 
 (defn gen
   "Returns a function that, when called, will call f with an incremented

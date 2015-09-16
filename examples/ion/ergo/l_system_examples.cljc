@@ -36,10 +36,6 @@
 (deftest fibonacci-sequence-basic-test
   (is (= 144 (-> (basic-fibonacci-sequence) (nth 10) count))))
 
-(comment
-  (cr/with-progress-reporting
-    (cr/quick-bench (-> (basic-fibonacci-sequence) (nth 10) count) :verbose))
-  )
 
 (defn stochastic-fibonacci-sequence
   "Returns a lazy sequence of vectors of Fibonacci integers starting randomly
@@ -135,6 +131,22 @@
     (ls/parametric-contextual-system axiom rules)))
 
 (comment (take 5 (parametric-contextual-system-example)))
+
+
+; -----------------------------------------------------------------------------
+; Performance Benchmarking
+
+(comment
+  (cr/with-progress-reporting
+    (cr/quick-bench (nth (basic-fibonacci-sequence) 11) :verbose)))
+
+(comment
+  (cr/with-progress-reporting
+    (cr/quick-bench (nth (parametric-system-example) 11) :verbose)))
+
+(comment
+  (cr/with-progress-reporting
+    (cr/quick-bench (nth (parametric-contextual-system-example) 11) :verbose)))
 
 
 ; -----------------------------------------------------------------------------
