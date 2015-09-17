@@ -2,7 +2,7 @@
   (:require #?(:clj  [clojure.test :refer :all]
                :cljs [cljs.test :refer-macros [deftest is testing]])
                      [criterium.core :as cr]
-                     [ion.ergo.l-system :as ls]))
+                     [ion.ergo.l-system :as ls :refer [->MP]]))
 
 ; -----------------------------------------------------------------------------
 ; Helper Functions
@@ -133,20 +133,44 @@
 (comment (take 5 (parametric-contextual-system-example)))
 
 
+(defn parametric-module-example
+  []
+  (let [axiom [(->MP :A {:age 0})]
+        rules {:A (fn [g w d i m]
+                    [(->MP :B {:age 0})
+                     :-
+                     (->MP m {:age (inc (age d i))})
+                     :-
+                     (->MP :B {:age 0})])
+               :B (fn [g w d i m]
+                    [(->MP :A {:age 0})
+                     :+
+                     (->MP m {:age (inc (age d i))})
+                     :+
+                     (->MP :A {:age 0})])}]
+    (ls/parametric-contextual-system axiom rules)))
+
+(comment (take 5 (parametric-module-example)))
+
+
 ; -----------------------------------------------------------------------------
 ; Performance Benchmarking
 
 (comment
   (cr/with-progress-reporting
-    (cr/quick-bench (nth (basic-fibonacci-sequence) 11) :verbose)))
+    (cr/quick-bench (nth (basic-fibonacci-sequence) 10) :verbose)))
 
 (comment
   (cr/with-progress-reporting
-    (cr/quick-bench (nth (parametric-system-example) 11) :verbose)))
+    (cr/quick-bench (nth (parametric-system-example) 10) :verbose)))
 
 (comment
   (cr/with-progress-reporting
-    (cr/quick-bench (nth (parametric-contextual-system-example) 11) :verbose)))
+    (cr/quick-bench (nth (parametric-contextual-system-example) 10) :verbose)))
+
+(comment
+  (cr/with-progress-reporting
+    (cr/quick-bench (nth (parametric-module-example) 10) :verbose)))
 
 
 ; -----------------------------------------------------------------------------

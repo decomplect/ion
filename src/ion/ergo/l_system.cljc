@@ -52,9 +52,10 @@
    will be called and can also be passed arguments for use in the
    context-sensitive calculation of successor module(s) (and, optionally,
    parameter data) to be returned by the function. To associate parameter data
-   with a module, a successor must be defined as 2-element list where the first
-   element is the module and the second element is an instance of any datatype,
-   though it would usually be a map containing parameter keys and values.
+   with a module, a successor must be defined as 2-element list, or an instance
+   of the Parametric Module type, where the first element is the module and the
+   second element is an instance of any datatype, though it would usually be a
+   map containing parameter keys and values.
 
    During the processing of a parametric system, any optional module parameter
    data is stored in a map associated by a key that is the index position of
@@ -157,6 +158,57 @@
 
 
 ; -----------------------------------------------------------------------------
+; Parametric Module
+
+#?(:cljs
+   (deftype MP [module parameters]
+     ICounted
+     (-count [_] 2)
+     IIndexed
+     (-nth [_ i]
+       (case i
+         0 module
+         1 parameters))
+     (-nth [_ i not-found]
+       (case i
+         0 module
+         1 parameters
+         not-found))
+     ILookup
+     (-lookup [this k] (-lookup this k nil))
+     (-lookup [_ k _]
+       (case k
+         0 module
+         1 parameters))
+     ISeqable
+     (-seq [_]
+       (seq [module parameters])))
+   :clj
+   (deftype MP [module parameters]
+     clojure.lang.Counted
+     (count [_] 2)
+     clojure.lang.Indexed
+     (nth [_ i]
+       (case i
+         0 module
+         1 parameters
+         (throw (IllegalArgumentException.))))
+     (nth [this i _] (nth this i))
+     clojure.lang.ILookup
+     (valAt [this k] (.valAt this k nil))
+     (valAt [_ k _]
+       (case k
+         0 module
+         1 parameters
+         (throw (IllegalArgumentException.))))
+     clojure.lang.Seqable
+     (seq [_] (seq [module parameters]))))
+
+(defn parametric-module? [m]
+  (instance? MP m))
+
+
+; -----------------------------------------------------------------------------
 ; Transformation Functions
 
 (defn rewrite-module
@@ -214,9 +266,9 @@
     (let [data (volatile! {})
           index (volatile! 0)
           split (fn [n successor]
-                  (if (list? successor)
+                  (if (or (parametric-module? successor) (list? successor))
                     (do
-                      (vswap! data assoc (+ @index n) (last successor))
+                      (vswap! data assoc (+ @index n) (nth successor 1))
                       (first successor))
                     successor))]
       (fn
