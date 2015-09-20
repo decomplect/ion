@@ -5,9 +5,9 @@
 
 (deftest rewrite-test
   (let [rules {:A [:B :A :B]}]
-    (is (= (rewrite-module rules :A) [:B :A :B]))
-    (is (= (rewrite-module rules :B) [:B]))
-    (is (= (rewrite-module rules :C) [:C]))))
+    (is (= (rewrite rules :A) [:B :A :B]))
+    (is (= (rewrite rules :B) [:B]))
+    (is (= (rewrite rules :C) [:C]))))
 
 (deftest basic-system-test
   (let [axiom [0]

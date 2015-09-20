@@ -2,7 +2,7 @@
   (:require #?(:clj  [clojure.test :refer :all]
                :cljs [cljs.test :refer-macros [deftest is testing]])
                      [criterium.core :as cr]
-                     [ion.ergo.l-system :as ls :refer [->MP]]))
+                     [ion.ergo.l-system :as ls]))
 
 ; -----------------------------------------------------------------------------
 ; Helper Functions
@@ -13,11 +13,6 @@
   [key]
   (let [gramm (key grammarpedia)]
     [(:axiom gramm) (:rules gramm)]))
-
-(defn age
-  "Returns the age parameter value for the module at index."
-  [data index]
-  (-> data (get index) :age))
 
 (defn neighbors
   "Returns a vector of left / right neighbor values."
@@ -86,12 +81,22 @@
     (ls/basic-system axiom rules)))
 
 
+(defn dragon-sequence
+  "Returns a lazy sequence of vectors."
+  []
+  (let [axiom [:F :x]
+        rules {:x [:x :+ :y :F :+]
+               :y [:- :F :x :- :y]}]
+    (ls/basic-system axiom rules)))
+
+
 (comment
   (take 5 (basic-fibonacci-sequence))
   (take 5 (stochastic-fibonacci-sequence))
   (take 5 (changing-rules-sequence))
   (take 5 (generational-sequence))
   (take 5 (stochastic-generational-sequence))
+  (take 5 (dragon-sequence))
   )
 
 
@@ -113,64 +118,108 @@
 (comment (take 5 (parametric-system-example)))
 
 
-(defn parametric-contextual-system-example
+(defrecord RModule [key age]
+  ls/Module (module [_] key))
+
+(defn record-module-example
   []
-  (let [axiom ['(:A {:age 0})]
-        rules {:A (fn [g w d i m]
-                    ['(:B {:age 0})
+  (let [axiom [(->RModule :A 0)]
+        rules {:A (fn [g w i m]
+                    [(->RModule :B 0)
                      :-
-                     (list m {:age (inc (age d i))})
+                     (->RModule (:key m) (inc (:age m)))
                      :-
-                     '(:B {:age 0})])
-               :B (fn [g w d i m]
-                    ['(:A {:age 0})
+                     (->RModule :B 0)])
+               :B (fn [g w i m]
+                    [(->RModule :A 0)
                      :+
-                     (list m {:age (inc (age d i))})
+                     (->RModule (:key m) (inc (:age m)))
                      :+
-                     '(:A {:age 0})])}]
-    (ls/parametric-contextual-system axiom rules)))
+                     (->RModule :A 0)])}]
+    (ls/parametric-context-sensitive-system axiom rules)))
 
-(comment (take 5 (parametric-contextual-system-example)))
+(comment (take 5 (record-module-example)))
 
 
-(defn parametric-module-example
+(defn record-module-example-2
   []
-  (let [axiom [(->MP :A {:age 0})]
-        rules {:A (fn [g w d i m]
-                    [(->MP :B {:age 0})
+  (let [axiom [(->RModule :A 0)]
+        rules {:A (fn [g w i m]
+                    [(->RModule :B 0)
                      :-
-                     (->MP m {:age (inc (age d i))})
+                     (->RModule (.module m) (inc (.-age m)))
                      :-
-                     (->MP :B {:age 0})])
-               :B (fn [g w d i m]
-                    [(->MP :A {:age 0})
+                     (->RModule :B 0)])
+               :B (fn [g w i m]
+                    [(->RModule :A 0)
                      :+
-                     (->MP m {:age (inc (age d i))})
+                     (->RModule (.module m) (inc (.-age m)))
                      :+
-                     (->MP :A {:age 0})])}]
-    (ls/parametric-contextual-system axiom rules)))
+                     (->RModule :A 0)])}]
+    (ls/parametric-context-sensitive-system axiom rules)))
 
-(comment (take 5 (parametric-module-example)))
+(comment (take 5 (record-module-example-2)))
+
+
+(deftype TModule [key age]
+  ls/Module
+  (module [_] key)
+  Object
+  (toString [_] (str "<" key " " age ">")))
+
+(defmethod clojure.core/print-method TModule [x writer]
+  (.write writer (str x)))
+
+(defn type-module-example
+  []
+  (let [axiom [(->TModule :A 0)]
+        rules {:A (fn [g w i m]
+                    [(->TModule :B 0)
+                     :-
+                     (->TModule (.key m) (inc (.-age m)))
+                     :-
+                     (->TModule :B 0)])
+               :B (fn [g w i m]
+                    [(->TModule :A 0)
+                     :+
+                     (->TModule (.key m) (inc (.-age m)))
+                     :+
+                     (->TModule :A 0)])}]
+    (ls/parametric-context-sensitive-system axiom rules)))
+
+(comment (take 5 (type-module-example)))
 
 
 ; -----------------------------------------------------------------------------
 ; Performance Benchmarking
 
 (comment
-  (cr/with-progress-reporting
-    (cr/quick-bench (nth (basic-fibonacci-sequence) 10) :verbose)))
+  (cr/with-progress-reporting ;; 155 ms
+    (cr/quick-bench (nth (record-module-example-2) 8) :verbose)))
+
+(comment
+  (cr/with-progress-reporting ;; 110 ms
+    (cr/quick-bench (nth (record-module-example) 8) :verbose)))
+
+(comment
+  (cr/with-progress-reporting ;; 123 ms
+    (cr/quick-bench (nth (type-module-example) 8) :verbose)))
+
+(comment
+  (cr/with-progress-reporting ;; 1.066 ms
+    (cr/quick-bench (nth (dragon-sequence) 10) :verbose)))
+
+(comment
+  (cr/with-progress-reporting ;; 8.856 ms
+    (cr/quick-bench (nth (basic-fibonacci-sequence) 20) :verbose)))
+
+(comment
+  (cr/with-progress-reporting ;; 9.327 ms
+    (cr/quick-bench (nth (stochastic-fibonacci-sequence) 20) :verbose)))
 
 (comment
   (cr/with-progress-reporting
     (cr/quick-bench (nth (parametric-system-example) 10) :verbose)))
-
-(comment
-  (cr/with-progress-reporting
-    (cr/quick-bench (nth (parametric-contextual-system-example) 10) :verbose)))
-
-(comment
-  (cr/with-progress-reporting
-    (cr/quick-bench (nth (parametric-module-example) 10) :verbose)))
 
 
 ; -----------------------------------------------------------------------------
