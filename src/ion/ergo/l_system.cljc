@@ -204,10 +204,10 @@
 (defn basic-system
   "Returns a lazy sequence of words from a context-free rewriting process."
   [axiom rules]
-  (let [f-xf (gen (fn [g]
-                    (comp (rewriting axiom rules g)
-                          cat)))]
-    (context-free-process f-xf)))
+  (let [get-xf (gen (fn [g]
+                      (comp (rewriting axiom rules g)
+                            cat)))]
+    (context-free-process get-xf)))
 
 (defn functional-system
   "Returns a lazy sequence of words from a context-free rewriting process.
@@ -215,31 +215,31 @@
    called without passing it any arguments. The returned value may be
    deterministic or stochastic."
   [axiom rules]
-  (let [f-xf (gen (fn [g]
-                    (comp (rewriting axiom rules g)
-                          (calling)
-                          cat)))]
-    (context-free-process f-xf)))
+  (let [get-xf (gen (fn [g]
+                      (comp (rewriting axiom rules g)
+                            (calling)
+                            cat)))]
+    (context-free-process get-xf)))
 
 (defn context-sensitive-system
   "Returns a lazy sequence of words from a context-sensitive rewriting
    process. Allows a rewrite successor to (optionally) be a function that will
    get called with the current context as arguments."
   [axiom rules]
-  (let [f-xf (gen (fn [g w]
-                    (comp (rewriting axiom rules g)
-                          (calling g w)
-                          cat)))]
-    (context-sensitive-process f-xf)))
+  (let [get-xf (gen (fn [g w]
+                      (comp (rewriting axiom rules g)
+                            (calling g w)
+                            cat)))]
+    (context-sensitive-process get-xf)))
 
 (defn parametric-system
   "Returns a lazy sequence of words from a context-free rewriting process."
   [axiom rules]
-  (let [f-xf (gen (fn [g]
-                    (comp (modulating)
-                          (rewriting axiom rules g)
-                          cat)))]
-    (context-free-process f-xf)))
+  (let [get-xf (gen (fn [g]
+                      (comp (modulating)
+                            (rewriting axiom rules g)
+                            cat)))]
+    (context-free-process get-xf)))
 
 (defn parametric-functional-system
   "Returns a lazy sequence of words from a context-free rewriting process.
@@ -247,21 +247,21 @@
    called without passing it any arguments. The returned value may be
    deterministic or stochastic."
   [axiom rules]
-  (let [f-xf (gen (fn [g]
-                    (comp (modulating)
-                          (rewriting axiom rules g)
-                          (calling)
-                          cat)))]
-    (context-free-process f-xf)))
+  (let [get-xf (gen (fn [g]
+                      (comp (modulating)
+                            (rewriting axiom rules g)
+                            (calling)
+                            cat)))]
+    (context-free-process get-xf)))
 
 (defn parametric-context-sensitive-system
   "Returns a lazy sequence of words from a context-sensitive rewriting
    process. Allows a rewrite successor to (optionally) be a function that will
    get called with the current context as arguments."
   [axiom rules]
-  (let [f-xf (gen (fn [g w]
-                    (comp (modulating)
-                          (rewriting axiom rules g)
-                          (calling g w)
-                          cat)))]
-    (context-sensitive-process f-xf)))
+  (let [get-xf (gen (fn [g w]
+                      (comp (modulating)
+                            (rewriting axiom rules g)
+                            (calling g w)
+                            cat)))]
+    (context-sensitive-process get-xf)))
