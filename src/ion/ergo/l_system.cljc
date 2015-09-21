@@ -36,8 +36,7 @@
    developmental sequence of words by recusively applying a set of productions,
    or replacement rules. The resulting seqence of words can then be used as
    data for futher processing, such as to be rendered as a graphic or
-   animation, or played as music. We call each word in this sequence a
-   generation.
+   animation, or played as music.
 
    Because productions typically replace each module with more than one
    module, words tend to grow in size with each successive generation. And
@@ -50,9 +49,9 @@
    optional parameters to be associated with a module. It also allows rules to
    be expressed using functions. If a rule's replacement value is a function it
    will be called and can also be passed arguments for use in the
-   context-sensitive calculation of successor module(s). To associate parameter
-   data with a module, a successor must be defined as a deftype or defrecord
-   that satifsfies the Module protocol.")
+   context-sensitive calculation of successor modules. To associate parameter
+   data with a module, a successor module must be defined as a deftype or
+   defrecord that satifsfies the Module protocol.")
 
 
 ; -----------------------------------------------------------------------------
@@ -98,8 +97,8 @@
 ; RAT Process
 
 (defn produce
-  "Returns a lazy sequence of words from a context-free, recursive, axiomatic,
-   transducible process."
+  "Returns a lazy sequence of words from a recursive, axiomatic, transducible
+   process."
   [get-xf]
   (letfn [(process [w]
                    (lazy-seq
@@ -120,7 +119,7 @@
 ; Transformation Functions
 
 (defn modulate
-  "Returns the module or the module supplied by a an object implementing the
+  "Returns the module or the module supplied by an object implementing the
    Module protocol."
   [m]
   (if (satisfies? Module m) (module m) m))
