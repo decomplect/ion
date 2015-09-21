@@ -95,29 +95,17 @@
 
 
 ; -----------------------------------------------------------------------------
-; Rewriting Processes
+; RAT Process
 
-(defn context-free-process
+(defn produce
   "Returns a lazy sequence of words from a context-free, recursive, axiomatic,
    transducible process."
   [get-xf]
   (letfn [(process [w]
                    (lazy-seq
-                     (when-let [s (seq w)]
-                       (let [vecs (map vector s)
-                             word (into [] (get-xf) vecs)]
-                         (cons word (process word))))))]
-    (process jumpstart)))
-
-(defn context-sensitive-process
-  "Returns a lazy sequence of words from a context-sensitive, recursive,
-   axiomatic, transducible process."
-  [get-xf]
-  (letfn [(process [w]
-                   (lazy-seq
-                     (when-let [s (seq w)]
-                       (let [vecs (map-indexed vector s)
-                             word (into [] (get-xf s) vecs)]
+                     (when (seq w)
+                       (let [v (vec w)
+                             word (into [] (get-xf v) v)]
                          (cons word (process word))))))]
     (process jumpstart)))
 
@@ -131,47 +119,54 @@
 ; -----------------------------------------------------------------------------
 ; Transformation Functions
 
+(defn modulate
+  "Returns the module or the module supplied by a an object implementing the
+   Module protocol."
+  [m]
+  (if (satisfies? Module m) (module m) m))
+
+(defn rewrite
+  "Returns a successor, which must be a vector or a function. If no match is
+   found in the rules mapping, the original module is return within a vector."
+  [rules m]
+  (or (rules m) [m]))
+
+(defn call
+  "Returns a function that will return the successor vector, or the result of
+   calling the successor function, which must return a vector of modules."
+  ([]
+   (fn context-free-call [successor]
+     (if (fn? successor)
+       (successor)
+       successor)))
+  ([g w]
+   (let [index (volatile! -1)]
+     (fn context-sensitive-call [successor]
+       (vswap! index inc)
+       (if (fn? successor)
+         (successor g w @index (get w @index))
+         successor)))))
+
+
+; -----------------------------------------------------------------------------
+; Transducers
+
+(defn modulating
+  "Returns a module-extracting transducer."
+  []
+  (map modulate))
+
 (defn get-rules
-  "Return rules for generation, calling any rules written as functions."
+  "Returns the rules for a generation, calling any rules written as functions."
   [axiom rules g]
   (if (= 0 g)
     {axiom-key axiom}
     (if (fn? rules) (rules g) rules)))
 
-(defn modulate
-  "Returns a vector of the module."
-  ([m-or-M]
-   [(if (satisfies? Module m-or-M) (module m-or-M) m-or-M)])
-  ([i m-or-M]
-   [i m-or-M (if (satisfies? Module m-or-M) (module m-or-M) m-or-M)]))
-
-(defn rewrite
-  "Returns vector of original values or successors if module is found in the
-   rules mapping."
-  ([rules m]
-   (or (rules m) [m]))
-  ([rules i m]
-   [i m (or (rules m) [m])])
-  ([rules i m-or-M m]
-   [i m-or-M (or (rules m) [m])]))
-
-(defn call
-  "Returns a function that, when called, will return the successor vector, or
-   the result of calling the successor function."
-  ([]
-   (fn [successor] (if (fn? successor) (successor) successor)))
-  ([g w]
-   (fn [[i m successor]] (if (fn? successor) (successor g w i m) successor))))
-
-(defn modulating
-  "Returns a module-preparation transducer."
-  []
-  (map #(apply modulate %)))
-
 (defn rewriting
   "Returns a rewriting transducer."
   [axiom rules g]
-  (map #(apply (partial rewrite (get-rules axiom rules g)) %)))
+  (map (partial rewrite (get-rules axiom rules g))))
 
 (defn calling
   "Returns a function-calling transducer."
@@ -182,20 +177,17 @@
 
 
 ; -----------------------------------------------------------------------------
-; Generation Context
+; Generation and Word Context
 
 (defn gen
   "Returns a function that, when called, will call f with an incremented
-   generation value or incremented generation value and word."
+   generation value and word."
   [f]
   (let [generation (volatile! -1)]
     (fn
-      ([]
-       (vswap! generation inc)
-       (f @generation))
-      ([word]
-       (vswap! generation inc)
-       (f @generation word)))))
+      [word]
+      (vswap! generation inc)
+      (f @generation word))))
 
 
 ; -----------------------------------------------------------------------------
@@ -204,10 +196,9 @@
 (defn basic-system
   "Returns a lazy sequence of words from a context-free rewriting process."
   [axiom rules]
-  (let [get-xf (gen (fn [g]
-                      (comp (rewriting axiom rules g)
-                            cat)))]
-    (context-free-process get-xf)))
+  (produce (gen (fn [g _]
+                  (comp (rewriting axiom rules g)
+                        cat)))))
 
 (defn functional-system
   "Returns a lazy sequence of words from a context-free rewriting process.
@@ -215,31 +206,28 @@
    called without passing it any arguments. The returned value may be
    deterministic or stochastic."
   [axiom rules]
-  (let [get-xf (gen (fn [g]
-                      (comp (rewriting axiom rules g)
-                            (calling)
-                            cat)))]
-    (context-free-process get-xf)))
+  (produce (gen (fn [g _]
+                  (comp (rewriting axiom rules g)
+                        (calling)
+                        cat)))))
 
 (defn context-sensitive-system
   "Returns a lazy sequence of words from a context-sensitive rewriting
    process. Allows a rewrite successor to (optionally) be a function that will
    get called with the current context as arguments."
   [axiom rules]
-  (let [get-xf (gen (fn [g w]
-                      (comp (rewriting axiom rules g)
-                            (calling g w)
-                            cat)))]
-    (context-sensitive-process get-xf)))
+  (produce (gen (fn [g w]
+                  (comp (rewriting axiom rules g)
+                        (calling g w)
+                        cat)))))
 
 (defn parametric-system
   "Returns a lazy sequence of words from a context-free rewriting process."
   [axiom rules]
-  (let [get-xf (gen (fn [g]
-                      (comp (modulating)
-                            (rewriting axiom rules g)
-                            cat)))]
-    (context-free-process get-xf)))
+  (produce (gen (fn [g _]
+                  (comp (modulating)
+                        (rewriting axiom rules g)
+                        cat)))))
 
 (defn parametric-functional-system
   "Returns a lazy sequence of words from a context-free rewriting process.
@@ -247,21 +235,19 @@
    called without passing it any arguments. The returned value may be
    deterministic or stochastic."
   [axiom rules]
-  (let [get-xf (gen (fn [g]
-                      (comp (modulating)
-                            (rewriting axiom rules g)
-                            (calling)
-                            cat)))]
-    (context-free-process get-xf)))
+  (produce (gen (fn [g _]
+                  (comp (modulating)
+                        (rewriting axiom rules g)
+                        (calling)
+                        cat)))))
 
 (defn parametric-context-sensitive-system
   "Returns a lazy sequence of words from a context-sensitive rewriting
    process. Allows a rewrite successor to (optionally) be a function that will
    get called with the current context as arguments."
   [axiom rules]
-  (let [get-xf (gen (fn [g w]
-                      (comp (modulating)
-                            (rewriting axiom rules g)
-                            (calling g w)
-                            cat)))]
-    (context-sensitive-process get-xf)))
+  (produce (gen (fn [g w]
+                  (comp (modulating)
+                        (rewriting axiom rules g)
+                        (calling g w)
+                        cat)))))
