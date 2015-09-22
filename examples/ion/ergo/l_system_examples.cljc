@@ -194,12 +194,12 @@
 ; Performance Benchmarking
 
 (comment
-  (cr/with-progress-reporting ;; 155 ms
-    (cr/quick-bench (nth (record-module-example-2) 8) :verbose)))
-
-(comment
   (cr/with-progress-reporting ;; 110 ms
     (cr/quick-bench (nth (record-module-example) 8) :verbose)))
+
+(comment
+  (cr/with-progress-reporting ;; 155 ms
+    (cr/quick-bench (nth (record-module-example-2) 8) :verbose)))
 
 (comment
   (cr/with-progress-reporting ;; 123 ms
