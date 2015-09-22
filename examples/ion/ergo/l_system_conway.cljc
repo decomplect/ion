@@ -2,58 +2,7 @@
   (:require #?(:clj  [clojure.test :refer :all]
                :cljs [cljs.test :refer-macros [deftest is testing]])
                      [criterium.core :as cr]
-                     [ion.ergo.l-system :as ls]))
-
-
-;; -----------------------------------------------------------------------------
-;; Cellular Automata
-
-(defn ca-produce
-  "Returns a lazy sequence of cells."
-  [prep get-xf seed]
-  (letfn [(process [cells]
-                   (lazy-seq
-                     (when (seq cells)
-                       (let [cells (into #{} (get-xf cells) (prep cells))]
-                         (cons cells (process cells))))))]
-    (process seed)))
-
-(defn neighbors-4 [[x y]]
-  (map vector
-       ((juxt inc identity dec identity) x)
-       ((juxt identity inc identity dec) y)))
-
-(defn neighbors-5 [[x y]]
-  (map vector
-       ((juxt inc identity dec identity identity) x)
-       ((juxt identity inc identity dec identity) y)))
-
-(defn neighbors-8 [[x y]]
-  (map vector
-       ((juxt inc inc identity dec dec dec identity inc) x)
-       ((juxt identity inc inc inc identity dec dec dec) y)))
-
-(defn neighbors-9 [[x y]]
-  (map vector
-       ((juxt inc inc identity dec dec dec identity inc identity) x)
-       ((juxt identity inc inc inc identity dec dec dec identity) y)))
-
-(defn prep-8
-  "Returns a map of [x y] n pairs."
-  [cells]
-  (frequencies (mapcat neighbors-8 cells)))
-
-(defn exist?
-  "Returns a cell if destiny will allow, or mother nature brings it to life."
-  [birth? survive? cells [cell n]]
-  (if (cells cell)
-    (when (survive? n) cell)
-    (when (birth? n) cell)))
-
-(defn existing?
-  "Returns an existence-determining transducer."
-  [birth? survive? cells]
-  (keep (partial exist? birth? survive? cells)))
+                     [ion.ergo.core :as ergo]))
 
 
 ;; -----------------------------------------------------------------------------
@@ -63,15 +12,15 @@
   [cells]
   (let [birth?   #{2 3}
         survive? #{3}]
-    (comp (existing? birth? survive? cells))))
+    (comp (ergo/existing? birth? survive? cells))))
 
 (defn conway-gol
   [seed]
-  (ca-produce prep-8 conway-gol-xf seed))
+  (cons (set seed) (ergo/produce conway-gol-xf ergo/prep-8 #(set seed))))
 
 (def acorn #{[70 62] [71 60] [71 62] [73 61] [74 62] [75 62] [76 62]})
 
-(comment (nth (conway-gol acorn) 2))
+(comment (nth (conway-gol acorn) 10))
 
 
 ;; -----------------------------------------------------------------------------
