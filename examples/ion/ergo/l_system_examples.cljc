@@ -94,7 +94,8 @@
 
 
 (defrecord M1 [key color]
-  ergo/Module (module [_] key))
+  ergo/Rewrite
+  (module [_] key))
 
 (defmethod clojure.core/print-method M1 [m writer]
   (.write writer (str "<" (ergo/module m) " " (:color m) ">")))
@@ -118,7 +119,7 @@
 
 
 (defrecord M2 [key age]
-  ergo/Module (module [_] key))
+  ergo/Rewrite (module [_] key))
 
 (defn record-module-example
   []
@@ -141,7 +142,7 @@
 
 
 (deftype TM [key age]
-  ergo/Module
+  ergo/Rewrite
   (module [_] key)
   Object
   (toString [_] (str "<" key " " age ">")))

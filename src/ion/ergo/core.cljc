@@ -20,6 +20,61 @@
 
 
 ; -----------------------------------------------------------------------------
+; Protocols / Records / Types
+
+(defprotocol Coordinates (point [this]))
+
+(defprotocol Rewrite (module [this]))
+
+#?(:cljs
+   (deftype Cell [x y]
+     Coordinates
+     (point [_] [x y])
+     ICounted
+     (-count [_] 2)
+     IIndexed
+     (-nth [_ i]
+       (case i
+         0 x
+         1 y))
+     (-nth [_ i not-found]
+       (case i
+         0 x
+         1 y
+         not-found))
+     ILookup
+     (-lookup [this k] (-lookup this k nil))
+     (-lookup [_ k _]
+       (case k
+         0 x
+         1 y))
+     ISeqable
+     (-seq [_] (seq [x y])))
+   :clj
+   (deftype Cell [x y]
+     Coordinates
+     (point [_] [x y])
+     clojure.lang.Counted
+     (count [_] 2)
+     clojure.lang.Indexed
+     (nth [_ i]
+       (case i
+         0 x
+         1 y
+         (throw (IllegalArgumentException.))))
+     (nth [this i _] (nth this i))
+     clojure.lang.ILookup
+     (valAt [this k] (.valAt this k nil))
+     (valAt [_ k _]
+       (case k
+         0 x
+         1 y
+         (throw (IllegalArgumentException.))))
+     clojure.lang.Seqable
+     (seq [_] (seq [x y]))))
+
+
+; -----------------------------------------------------------------------------
 ; Helper Functions
 
 (declare grammarpedia)
@@ -49,20 +104,27 @@
        ((juxt inc identity dec identity identity) x)
        ((juxt identity inc identity dec identity) y)))
 
+(def neighborhood-8-x (juxt inc inc identity dec dec dec identity inc))
+(def neighborhood-8-y (juxt identity inc inc inc identity dec dec dec))
+
 (defn neighborhood-8 [[x y]]
-  (map vector
-       ((juxt inc inc identity dec dec dec identity inc) x)
-       ((juxt identity inc inc inc identity dec dec dec) y)))
+  (map ->Cell (neighborhood-8-x x) (neighborhood-8-y y)))
+
+(def neighborhood-9-x (juxt inc inc identity dec dec dec identity inc identity))
+(def neighborhood-9-y (juxt identity inc inc inc identity dec dec dec identity))
 
 (defn neighborhood-9 [[x y]]
-  (map vector
-       ((juxt inc inc identity dec dec dec identity inc identity) x)
-       ((juxt identity inc inc inc identity dec dec dec identity) y)))
+  (map ->Cell (neighborhood-9-x x) (neighborhood-9-y y)))
 
-(defn prep-8
-  "Returns a map of [x y] n pairs."
+(defn neighbor-freq-8
+  "Returns a map of cell, neighbor-count pairs."
   [cells]
   (frequencies (mapcat neighborhood-8 cells)))
+
+(defn neighbor-freq-9
+  "Returns a map of cell, neighbor-count pairs."
+  [cells]
+  (frequencies (mapcat neighborhood-9 cells)))
 
 
 ; -----------------------------------------------------------------------------
@@ -85,19 +147,13 @@
 
 
 ; -----------------------------------------------------------------------------
-; Protocols
-
-(defprotocol Module (module [m]))
-
-
-; -----------------------------------------------------------------------------
 ; Transformation Functions
 
 (defn modulate
   "Returns the module or the module supplied by an object implementing the
-   Module protocol."
+   Rewrite protocol."
   [m]
-  (if (satisfies? Module m) (module m) m))
+  (if (satisfies? Rewrite m) (module m) m))
 
 (defn rewrite
   "Returns a successor, which must be a vector or a function. If no match is
@@ -123,10 +179,10 @@
 
 (defn exist?
   "Returns a cell if destiny will allow, or mother nature brings it to life."
-  [birth? survive? cells [cell n]]
+  [birth? survive? cells [cell neighbor-count]]
   (if (cells cell)
-    (when (survive? n) cell)
-    (when (birth? n) cell)))
+    (when (survive? neighbor-count) cell)
+    (when (birth? neighbor-count) cell)))
 
 
 ; -----------------------------------------------------------------------------
@@ -174,6 +230,40 @@
       [data]
       (vswap! generation inc)
       (f @generation data))))
+
+
+; -----------------------------------------------------------------------------
+; Cellular Automata
+
+(defn ca-conway-life-xf
+  [cells]
+  (let [birth?   #{3}
+        survive? #{2 3}]
+    (comp (existing? birth? survive? cells))))
+
+(defn ca-conway-life
+  [seed]
+  (cons (set seed) (produce ca-conway-life-xf neighbor-freq-8 #(set seed))))
+
+(defn ca-gnarl-xf
+  [cells]
+  (let [birth?   #{1}
+        survive? #{1}]
+    (comp (existing? birth? survive? cells))))
+
+(defn ca-gnarl
+  [seed]
+  (cons (set seed) (produce ca-gnarl-xf neighbor-freq-8 #(set seed))))
+
+(defn ca-replicator-xf
+  [cells]
+  (let [birth?   #{1 3 5 7}
+        survive? #{1 3 5 7}]
+    (comp (existing? birth? survive? cells))))
+
+(defn ca-replicator
+  [seed]
+  (cons (set seed) (produce ca-replicator-xf neighbor-freq-8 #(set seed))))
 
 
 ; -----------------------------------------------------------------------------
