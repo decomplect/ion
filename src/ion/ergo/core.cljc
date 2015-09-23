@@ -128,22 +128,32 @@
 
 
 ; -----------------------------------------------------------------------------
-; Recursive Axiomatic Transducible Sequence (RATS)
+; Recursive Axiomatic Transducible Sequence (RATS) Producer
 
 (defn produce
   "Returns a lazy sequence of colls from a recursive, axiomatic, transducible
    process."
-  ([get-xf]  ; Useful defaults for rewriting systems.
-   (produce get-xf identity #(vec [::axiom]) #(vec nil)))
-  ([get-xf prep seed]  ; Useful default for cellular automata.
-   (produce get-xf prep seed #(set nil)))
-  ([get-xf prep seed init]
-   (letfn [(process [coll]
-                    (lazy-seq
-                      (when (seq coll)
-                        (let [new-coll (into (init) (get-xf coll) (prep coll))]
-                          (cons new-coll (process new-coll))))))]
-     (process (into (init) (seed))))))
+  [init-f prep-f seed-f get-xf]
+  (letfn [(process
+            [coll]
+            (lazy-seq
+              (when (seq coll)
+                (let [new-coll (into (init-f) (get-xf coll) (prep-f coll))]
+                  (cons new-coll (process new-coll))))))]
+    (process (into (init-f) (seed-f)))))
+
+(defn ca-system
+  [prep seed get-xf]
+  (cons (set seed) (produce #(set nil) prep #(set seed) get-xf)))
+
+(def rewriting-system (partial produce #(vec nil) identity #(vec [::axiom])))
+
+(defn get-rewriting-rules
+  "Returns the rules for a generation, calling any rules written as functions."
+  [axiom rules generation]
+  (if (= 0 generation)
+    {::axiom axiom}
+    (if (fn? rules) (rules generation) rules)))
 
 
 ; -----------------------------------------------------------------------------
@@ -179,7 +189,7 @@
 
 (defn exist?
   "Returns a cell if destiny will allow, or mother nature brings it to life."
-  [birth? survive? cells [cell neighbor-count]]
+  [survive? birth? cells [cell neighbor-count]]
   (if (cells cell)
     (when (survive? neighbor-count) cell)
     (when (birth? neighbor-count) cell)))
@@ -192,13 +202,6 @@
   "Returns a module-extracting transducer."
   []
   (map modulate))
-
-(defn get-rewriting-rules
-  "Returns the rules for a generation, calling any rules written as functions."
-  [axiom rules generation]
-  (if (= 0 generation)
-    {::axiom axiom}
-    (if (fn? rules) (rules generation) rules)))
 
 (defn rewriting
   "Returns a rewriting transducer."
@@ -214,8 +217,8 @@
 
 (defn existing?
   "Returns an existence-determining transducer."
-  [birth? survive? cells]
-  (keep (partial exist? birth? survive? cells)))
+  [survive? birth? cells]
+  (keep (partial exist? survive? birth? cells)))
 
 
 ; -----------------------------------------------------------------------------
@@ -235,35 +238,47 @@
 ; -----------------------------------------------------------------------------
 ; Cellular Automata
 
-(defn ca-conway-life-xf
-  [cells]
-  (let [birth?   #{3}
-        survive? #{2 3}]
-    (comp (existing? birth? survive? cells))))
+(declare cellupedia)
 
-(defn ca-conway-life
-  [seed]
-  (cons (set seed) (produce ca-conway-life-xf neighbor-freq-8 #(set seed))))
+(defn ca-rules
+  "Returns the [survive? birth? neighbor-freq] rules trifecta from cellupedia."
+  [key]
+  (let [info (key cellupedia)]
+    [(:S info) (:B info) (:N info)]))
 
-(defn ca-gnarl-xf
-  [cells]
-  (let [birth?   #{1}
-        survive? #{1}]
-    (comp (existing? birth? survive? cells))))
+(defn ca-xf
+  [survive? birth? cells]
+  ; TODO comp in a trim function based on the grid size/behavior rules.
+  (existing? survive? birth? cells))
 
-(defn ca-gnarl
-  [seed]
-  (cons (set seed) (produce ca-gnarl-xf neighbor-freq-8 #(set seed))))
+(defn ca-sequence
+  [survive? birth? neighbor-freq seed]
+  (ca-system neighbor-freq seed (partial ca-xf survive? birth?)))
 
-(defn ca-replicator-xf
-  [cells]
-  (let [birth?   #{1 3 5 7}
-        survive? #{1 3 5 7}]
-    (comp (existing? birth? survive? cells))))
+(defn ca-builder
+  [key]
+  (partial (apply ca-sequence (ca-rules key))))
 
-(defn ca-replicator
-  [seed]
-  (cons (set seed) (produce ca-replicator-xf neighbor-freq-8 #(set seed))))
+(def ca-conway (ca-builder :conway))
+
+(def ca-gnarl (ca-builder :gnarl))
+
+
+; -----------------------------------------------------------------------------
+; Cellupedia
+
+(def cellupedia
+  {:conway
+   {:S #{2 3}
+    :B #{3}
+    :N neighbor-freq-8
+    }
+   :gnarl
+   {:S #{1}
+    :B #{1}
+    :N neighbor-freq-8
+    }
+   })
 
 
 ; -----------------------------------------------------------------------------
@@ -272,9 +287,9 @@
 (defn basic-rewriting-system
   "Returns a lazy sequence of words from a context-free rewriting process."
   [axiom rules]
-  (produce (gen (fn [g _]
-                  (comp (rewriting axiom rules g)
-                        cat)))))
+  (rewriting-system (gen (fn [g _]
+                           (comp (rewriting axiom rules g)
+                                 cat)))))
 
 (defn functional-rewriting-system
   "Returns a lazy sequence of words from a context-free rewriting process.
@@ -282,28 +297,28 @@
    called without passing it any arguments. The returned value may be
    deterministic or stochastic."
   [axiom rules]
-  (produce (gen (fn [g _]
-                  (comp (rewriting axiom rules g)
-                        (calling)
-                        cat)))))
+  (rewriting-system (gen (fn [g _]
+                           (comp (rewriting axiom rules g)
+                                 (calling)
+                                 cat)))))
 
 (defn context-sensitive-rewriting-system
   "Returns a lazy sequence of words from a context-sensitive rewriting
    process. Allows a rewrite successor to (optionally) be a function that will
    get called with the current context (g w i m) as arguments."
   [axiom rules]
-  (produce (gen (fn [g w]
-                  (comp (rewriting axiom rules g)
-                        (calling g w)
-                        cat)))))
+  (rewriting-system (gen (fn [g w]
+                           (comp (rewriting axiom rules g)
+                                 (calling g w)
+                                 cat)))))
 
 (defn parametric-rewriting-system
   "Returns a lazy sequence of words from a context-free rewriting process."
   [axiom rules]
-  (produce (gen (fn [g _]
-                  (comp (modulating)
-                        (rewriting axiom rules g)
-                        cat)))))
+  (rewriting-system (gen (fn [g _]
+                           (comp (modulating)
+                                 (rewriting axiom rules g)
+                                 cat)))))
 
 (defn parametric-functional-rewriting-system
   "Returns a lazy sequence of words from a context-free rewriting process.
@@ -311,22 +326,22 @@
    called without passing it any arguments. The returned value may be
    deterministic or stochastic."
   [axiom rules]
-  (produce (gen (fn [g _]
-                  (comp (modulating)
-                        (rewriting axiom rules g)
-                        (calling)
-                        cat)))))
+  (rewriting-system (gen (fn [g _]
+                           (comp (modulating)
+                                 (rewriting axiom rules g)
+                                 (calling)
+                                 cat)))))
 
 (defn parametric-context-sensitive-rewriting-system
   "Returns a lazy sequence of words from a context-sensitive rewriting
    process. Allows a rewrite successor to (optionally) be a function that will
    get called with the current context (g w i m) as arguments."
   [axiom rules]
-  (produce (gen (fn [g w]
-                  (comp (modulating)
-                        (rewriting axiom rules g)
-                        (calling g w)
-                        cat)))))
+  (rewriting-system (gen (fn [g w]
+                           (comp (modulating)
+                                 (rewriting axiom rules g)
+                                 (calling g w)
+                                 cat)))))
 
 
 ; -----------------------------------------------------------------------------
