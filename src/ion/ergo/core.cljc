@@ -1,6 +1,9 @@
 (ns ion.ergo.core
   "A toolkit for the construction of generative systems.")
 
+(set! *warn-on-reflection* true)
+(set! *unchecked-math* :warn-on-boxed)
+
 
 ; -----------------------------------------------------------------------------
 ; Shared Constants
@@ -22,16 +25,31 @@
 ; -----------------------------------------------------------------------------
 ; Protocols / Records / Types
 
-(defprotocol Coordinates (point [this]))
+(defprotocol Rewritable (module [this]))
 
-(defprotocol Rewrite (module [this]))
+(defprotocol Positioned
+  (position [this])
+  (x [this])
+  (y [this])
+  (z [this]))
+
+;(defn dist [p1 p2]
+;  (js/Math.sqrt (+ (js/Math.pow (- (x p2) (x p1)) 2)
+;                   (js/Math.pow (- (y p2) (y p1)) 2))))
+
+;(extend-protocol Positioned
+;  PersistentVector
+;  (x [v] (get v 0))
+;  (y [v] (get v 1)))
 
 #?(:cljs
-   (deftype Cell [x y]
-     Coordinates
-     (point [_] [x y])
-     ICounted
-     (-count [_] 2)
+   (deftype Cell [^long x ^long y]
+     Positioned
+     (position [_] [x y])
+     (x [_] x)
+     (y [_] y)
+     IHash
+     (-hash [_] (hash [x y]))
      IIndexed
      (-nth [_ i]
        (case i
@@ -41,65 +59,47 @@
        (case i
          0 x
          1 y
-         not-found))
-     ILookup
-     (-lookup [this k] (-lookup this k nil))
-     (-lookup [_ k _]
-       (case k
-         0 x
-         1 y))
-     ISeqable
-     (-seq [_] (seq [x y])))
+         not-found)))
    :clj
-   (deftype Cell [x y]
-     Coordinates
-     (point [_] [x y])
-     clojure.lang.Counted
-     (count [_] 2)
+   (deftype Cell [^long x ^long y]
+     Positioned
+     (position [_] [x y])
+     (x [_] x)
+     (y [_] y)
+     Object
+     (equals [_ that] (and (= x (.-x ^Cell that)) (= y (.-y ^Cell that))))
+     (hashCode [_] (hash [x y]))
      clojure.lang.Indexed
      (nth [_ i]
        (case i
          0 x
          1 y
          (throw (IllegalArgumentException.))))
-     (nth [this i _] (nth this i))
-     clojure.lang.ILookup
-     (valAt [this k] (.valAt this k nil))
-     (valAt [_ k _]
-       (case k
-         0 x
-         1 y
-         (throw (IllegalArgumentException.))))
-     clojure.lang.Seqable
-     (seq [_] (seq [x y]))))
+     (nth [this i _] (nth this i))))
+
+(defmethod clojure.core/print-method Cell [this ^java.io.Writer writer]
+  (.write writer (str "<Cell " (position this) ">")))
 
 
 ; -----------------------------------------------------------------------------
 ; Helper Functions
 
-(declare grammarpedia)
+(defn degrees [theta] (* (double theta) DEG))
 
-(defn grammar
-  [key]
-  (let [gramm (key grammarpedia)]
-    [(:axiom gramm) (:rules gramm)]))
+(defn radians [theta] (* (double theta) RAD))
 
-(defn degrees [theta] (* theta DEG))
-
-(defn radians [theta] (* theta RAD))
-
-(defn clamp [x min max]
+(defn clamp ^long [^long x ^long min ^long max]
   (if (< x min) min (if (> x max) max x)))
 
-(defn clamp-normalized [x]
+(defn clamp-normalized ^double [^double x]
   (if (< x -1.0) -1.0 (if (> x 1.0) 1.0 x)))
 
-(defn neighborhood-4 [[x y]]
+(defn neighborhood-4 [[^long x ^long y]]
   (map vector
        ((juxt inc identity dec identity) x)
        ((juxt identity inc identity dec) y)))
 
-(defn neighborhood-5 [[x y]]
+(defn neighborhood-5 [[^long x ^long y]]
   (map vector
        ((juxt inc identity dec identity identity) x)
        ((juxt identity inc identity dec identity) y)))
@@ -107,19 +107,19 @@
 (def neighborhood-8-x (juxt inc inc identity dec dec dec identity inc))
 (def neighborhood-8-y (juxt identity inc inc inc identity dec dec dec))
 
-(defn neighborhood-8 [[x y]]
-  (map ->Cell (neighborhood-8-x x) (neighborhood-8-y y)))
+(defn neighborhood-8 [cell-maker-f [^long x ^long y]]
+  (map cell-maker-f (neighborhood-8-x x) (neighborhood-8-y y)))
 
 (def neighborhood-9-x (juxt inc inc identity dec dec dec identity inc identity))
 (def neighborhood-9-y (juxt identity inc inc inc identity dec dec dec identity))
 
-(defn neighborhood-9 [[x y]]
-  (map ->Cell (neighborhood-9-x x) (neighborhood-9-y y)))
+(defn neighborhood-9 [cell-maker-f [^long x ^long y]]
+  (map cell-maker-f (neighborhood-9-x x) (neighborhood-9-y y)))
 
 (defn neighbor-freq-8
   "Returns a map of cell, neighbor-count pairs."
-  [cells]
-  (frequencies (mapcat neighborhood-8 cells)))
+  [cell-maker-f cells]
+  (frequencies (mapcat (partial neighborhood-8 cell-maker-f) cells)))
 
 (defn neighbor-freq-9
   "Returns a map of cell, neighbor-count pairs."
@@ -143,8 +143,8 @@
     (process (into (init-f) (seed-f)))))
 
 (defn ca-system
-  [prep seed get-xf]
-  (cons (set seed) (produce #(set nil) prep #(set seed) get-xf)))
+  [prep-f seed get-xf]
+  (cons (set seed) (produce #(set nil) prep-f #(set seed) get-xf)))
 
 (def rewriting-system (partial produce #(vec nil) identity #(vec [::axiom])))
 
@@ -163,7 +163,7 @@
   "Returns the module or the module supplied by an object implementing the
    Rewrite protocol."
   [m]
-  (if (satisfies? Rewrite m) (module m) m))
+  (if (satisfies? Rewritable m) (module m) m))
 
 (defn rewrite
   "Returns a successor, which must be a vector or a function. If no match is
@@ -179,17 +179,17 @@
      (if (fn? successor)
        (successor)
        successor)))
-  ([g w]
+  ([^long g w]
    (let [index (volatile! -1)]
      (fn context-sensitive-call [successor]
-       (vswap! index inc)
+       (vswap! index #(inc ^long %))
        (if (fn? successor)
-         (successor g w @index (get w @index))
+         (successor g w ^long @index (get w @index))
          successor)))))
 
 (defn exist?
   "Returns a cell if destiny will allow, or mother nature brings it to life."
-  [survive? birth? cells [cell neighbor-count]]
+  [survive? birth? cells [cell ^long neighbor-count]]
   (if (cells cell)
     (when (survive? neighbor-count) cell)
     (when (birth? neighbor-count) cell)))
@@ -231,7 +231,7 @@
   (let [generation (volatile! -1)]
     (fn
       [data]
-      (vswap! generation inc)
+      (vswap! generation #(inc ^long %))
       (f @generation data))))
 
 
@@ -246,43 +246,72 @@
   (let [info (key cellupedia)]
     [(:S info) (:B info) (:N info)]))
 
+(declare patternpedia)
+
+(defn pattern
+  "Returns the set of cells specified by the key from the patternpedia."
+  [key]
+  (key patternpedia))
+
 (defn ca-xf
   [survive? birth? cells]
   ; TODO comp in a trim function based on the grid size/behavior rules.
   (existing? survive? birth? cells))
 
 (defn ca-sequence
-  [survive? birth? neighbor-freq seed]
-  (ca-system neighbor-freq seed (partial ca-xf survive? birth?)))
+  [survive? birth? neighbor-freq-f cell-maker-f seed]
+  (let [seed (into #{} (map #(apply cell-maker-f %)) seed)
+        n-freq (partial neighbor-freq-f cell-maker-f)]
+    (ca-system n-freq seed (partial ca-xf survive? birth?))))
 
 (defn ca-builder
-  [key]
-  (partial (apply ca-sequence (ca-rules key))))
+  [rule-key cell-maker-f seed]
+  (let [[survive? birth? neighbor-freq-f] (ca-rules rule-key)]
+    (ca-sequence survive? birth? neighbor-freq-f cell-maker-f seed)))
 
-(def ca-conway (ca-builder :conway))
+(comment ; Conway's Game of Life example using Acorn pattern as the seed.
 
-(def ca-gnarl (ca-builder :gnarl))
+  (-> (ca-builder :conway-game-of-life vector (pattern :acorn)) (nth 10))
+
+  (-> (ca-builder :conway-game-of-life ->Cell (pattern :acorn)) (nth 10))
+
+  )
+
+
+; -----------------------------------------------------------------------------
+; Patternpedia
+
+(def patternpedia
+  {:acorn
+   #{[70 62] [71 60] [71 62] [73 61] [74 62] [75 62] [76 62]}
+   })
 
 
 ; -----------------------------------------------------------------------------
 ; Cellupedia
 
 (def cellupedia
-  {:conway
-   {:S #{2 3}
-    :B #{3}
-    :N neighbor-freq-8
-    }
+  {:conway-game-of-life
+   {:S #{2 3} :B #{3} :N neighbor-freq-8}
    :gnarl
-   {:S #{1}
-    :B #{1}
-    :N neighbor-freq-8
-    }
+   {:S #{1} :B #{1} :N neighbor-freq-8}
+   :replicator
+   {:S #{1 3 5 7} :B #{1 3 5 7} :N neighbor-freq-8}
+   :fredkin
+   {:S #{1 3 5 7 9} :B #{1 3 5 7 9} :N neighbor-freq-9}
    })
 
 
 ; -----------------------------------------------------------------------------
 ; Rewriting Systems
+
+(declare grammarpedia)
+
+(defn grammar
+  "Returns the [axiom rules] vector from the grammarpedia."
+  [key]
+  (let [gramm (key grammarpedia)]
+    [(:axiom gramm) (:rules gramm)]))
 
 (defn basic-rewriting-system
   "Returns a lazy sequence of words from a context-free rewriting process."
@@ -343,6 +372,16 @@
                                  (calling g w)
                                  cat)))))
 
+(comment ; A basic example.
+
+  (defn basic-fibonacci-sequence
+    "Returns a lazy sequence of vectors of Fibonacci integers - OEIS A003849."
+    []
+    (apply basic-rewriting-system (grammar :A003849)))
+
+  (-> (basic-fibonacci-sequence) (nth 10) count) ; 144
+
+  )
 
 ; -----------------------------------------------------------------------------
 ; Grammarpedia

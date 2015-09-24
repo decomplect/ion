@@ -34,6 +34,17 @@
 (def sample-points (get-points 100 100))
 
 (comment
+
+  (cr/with-progress-reporting
+    (cr/quick-bench
+      (count (-> (ergo/ca-builder :conway-game-of-life vector (ergo/pattern :acorn))
+                 (nth 1000))) :verbose))
+
+  (cr/with-progress-reporting
+    (cr/quick-bench
+      (count (-> (ergo/ca-builder :conway-game-of-life ergo/->Cell (ergo/pattern :acorn))
+                 (nth 1000))) :verbose))
+
   (cr/with-progress-reporting
     (cr/quick-bench (doall (map neighborhood-8-a sample-points)) :verbose))
   (cr/with-progress-reporting
@@ -41,3 +52,4 @@
   )
 
 (comment (count (map neighborhood-8-a sample-points)))
+
