@@ -37,16 +37,17 @@
 
   (cr/with-progress-reporting
     (cr/quick-bench
-      (count (-> (ergo/ca-builder :conway-game-of-life vector (ergo/pattern :acorn))
-                 (nth 1000))) :verbose))
+      (count (-> (ergo/ca-builder :conway-game-of-life vector
+                                  (ergo/pattern :acorn)) (nth 100))) :verbose))
 
   (cr/with-progress-reporting
     (cr/quick-bench
-      (count (-> (ergo/ca-builder :conway-game-of-life ergo/->Cell (ergo/pattern :acorn))
-                 (nth 1000))) :verbose))
+      (count (-> (ergo/ca-builder :conway-game-of-life ergo/cell
+                                  (ergo/pattern :acorn)) (nth 100))) :verbose))
 
   (cr/with-progress-reporting
     (cr/quick-bench (doall (map neighborhood-8-a sample-points)) :verbose))
+
   (cr/with-progress-reporting
     (cr/quick-bench (doall (map neighborhood-8-b sample-points)) :verbose))
   )

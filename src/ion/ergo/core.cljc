@@ -25,7 +25,8 @@
 ; -----------------------------------------------------------------------------
 ; Protocols / Records / Types
 
-(defprotocol Rewritable (module [this]))
+(defprotocol Rewritable
+  (module [this]))
 
 (defprotocol Positioned
   (position [this])
@@ -42,12 +43,36 @@
 ;  (x [v] (get v 0))
 ;  (y [v] (get v 1)))
 
+#?(:clj
+   (deftype Cell [^long x-coord ^long y-coord]
+     Positioned
+     (position [_] [x-coord y-coord])
+     (x [_] x-coord)
+     (y [_] y-coord)
+     Object
+     (equals [this that]
+       (and (instance? Cell that)
+            (and (= (x this) (x that))
+                 (= (y this) (y that)))))
+     (hashCode [this] (hash (position this)))
+     clojure.lang.Indexed
+     (nth [_ i]
+       (case i
+         0 x-coord
+         1 y-coord
+         (throw (IllegalArgumentException.))))
+     (nth [this i _] (nth this i))))
+
 #?(:cljs
    (deftype Cell [^long x ^long y]
      Positioned
      (position [_] [x y])
      (x [_] x)
      (y [_] y)
+     IEquiv
+     (-equiv [_ other]
+       (and (instance? Cell other)
+            (and (= x (x ^Cell other)) (= y (y ^Cell other)))))
      IHash
      (-hash [_] (hash [x y]))
      IIndexed
@@ -59,26 +84,18 @@
        (case i
          0 x
          1 y
-         not-found)))
-   :clj
-   (deftype Cell [^long x ^long y]
-     Positioned
-     (position [_] [x y])
-     (x [_] x)
-     (y [_] y)
-     Object
-     (equals [_ that] (and (= x (.-x ^Cell that)) (= y (.-y ^Cell that))))
-     (hashCode [_] (hash [x y]))
-     clojure.lang.Indexed
-     (nth [_ i]
-       (case i
-         0 x
-         1 y
-         (throw (IllegalArgumentException.))))
-     (nth [this i _] (nth this i))))
+         not-found))))
 
-(defmethod clojure.core/print-method Cell [this ^java.io.Writer writer]
-  (.write writer (str "<Cell " (position this) ">")))
+#?(:clj
+   (defmethod clojure.core/print-method Cell [this ^java.io.Writer writer]
+     (.write writer (str "<Cell " (position this) ">"))))
+
+(defn cell [x y]
+  (->Cell x y))
+
+(defn ^boolean cell?
+  [that]
+  (instance? Cell that))
 
 
 ; -----------------------------------------------------------------------------
@@ -133,20 +150,20 @@
 (defn produce
   "Returns a lazy sequence of colls from a recursive, axiomatic, transducible
    process."
-  [init-f prep-f seed-f get-xf]
+  [seed prep-f get-xf]
   (letfn [(process
             [coll]
             (lazy-seq
               (when (seq coll)
-                (let [new-coll (into (init-f) (get-xf coll) (prep-f coll))]
+                (let [new-coll (into (empty coll) (get-xf coll) (prep-f coll))]
                   (cons new-coll (process new-coll))))))]
-    (process (into (init-f) (seed-f)))))
+    (process seed)))
 
 (defn ca-system
-  [prep-f seed get-xf]
-  (cons (set seed) (produce #(set nil) prep-f #(set seed) get-xf)))
+  [seed prep-f get-xf]
+  (cons (set seed) (produce (set seed) prep-f get-xf)))
 
-(def rewriting-system (partial produce #(vec nil) identity #(vec [::axiom])))
+(def rewriting-system (partial produce [::axiom] identity))
 
 (defn get-rewriting-rules
   "Returns the rules for a generation, calling any rules written as functions."
@@ -262,7 +279,7 @@
   [survive? birth? neighbor-freq-f cell-maker-f seed]
   (let [seed (into #{} (map #(apply cell-maker-f %)) seed)
         n-freq (partial neighbor-freq-f cell-maker-f)]
-    (ca-system n-freq seed (partial ca-xf survive? birth?))))
+    (ca-system seed n-freq (partial ca-xf survive? birth?))))
 
 (defn ca-builder
   [rule-key cell-maker-f seed]
@@ -273,7 +290,7 @@
 
   (-> (ca-builder :conway-game-of-life vector (pattern :acorn)) (nth 10))
 
-  (-> (ca-builder :conway-game-of-life ->Cell (pattern :acorn)) (nth 10))
+  (-> (ca-builder :conway-game-of-life cell (pattern :acorn)) (nth 10))
 
   )
 
