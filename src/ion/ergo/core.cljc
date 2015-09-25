@@ -2,7 +2,7 @@
   "A toolkit for the construction of generative systems.")
 
 (set! *warn-on-reflection* true)
-(set! *unchecked-math* :warn-on-boxed)
+;(set! *unchecked-math* :warn-on-boxed)
 
 
 ; -----------------------------------------------------------------------------
@@ -44,17 +44,16 @@
 ;  (y [v] (get v 1)))
 
 #?(:clj
-   (deftype Cell [^long x-coord ^long y-coord]
+   (deftype Cell [x-coord y-coord]
      Positioned
      (position [_] [x-coord y-coord])
      (x [_] x-coord)
      (y [_] y-coord)
      Object
-     (equals [this that]
-       (and (instance? Cell that)
-            (and (= (x this) (x that))
-                 (= (y this) (y that)))))
-     (hashCode [this] (hash (position this)))
+     (equals [_ that]
+       (and (instance? Cell that) (and (= x-coord (.-x-coord ^Cell that))
+                                       (= y-coord (.-y-coord ^Cell that)))))
+     (hashCode [_] (hash [x-coord y-coord]))
      clojure.lang.Indexed
      (nth [_ i]
        (case i
@@ -64,26 +63,26 @@
      (nth [this i _] (nth this i))))
 
 #?(:cljs
-   (deftype Cell [^long x ^long y]
+   (deftype Cell [x-coord y-coord]
      Positioned
-     (position [_] [x y])
-     (x [_] x)
-     (y [_] y)
+     (position [_] [x-coord y-coord])
+     (x [_] x-coord)
+     (y [_] y-coord)
      IEquiv
-     (-equiv [_ other]
-       (and (instance? Cell other)
-            (and (= x (x ^Cell other)) (= y (y ^Cell other)))))
+     (-equiv [_ that]
+       (and (instance? Cell that) (and (= x-coord (.-x-coord ^Cell that))
+                                       (= y-coord (.-y-coord ^Cell that)))))
      IHash
-     (-hash [_] (hash [x y]))
+     (-hash [_] (hash [x-coord y-coord]))
      IIndexed
      (-nth [_ i]
        (case i
-         0 x
-         1 y))
+         0 x-coord
+         1 y-coord))
      (-nth [_ i not-found]
        (case i
-         0 x
-         1 y
+         0 x-coord
+         1 y-coord
          not-found))))
 
 #?(:clj
@@ -105,18 +104,19 @@
 
 (defn radians [theta] (* (double theta) RAD))
 
-(defn clamp ^long [^long x ^long min ^long max]
-  (if (< x min) min (if (> x max) max x)))
+(defn clamp [min max x]
+  (let [x (long x) min (long min) max (long max)]
+    (if (< x min) min (if (> x max) max x))))
 
-(defn clamp-normalized ^double [^double x]
-  (if (< x -1.0) -1.0 (if (> x 1.0) 1.0 x)))
+(defn clamp-normalized [x]
+  (let [x (double x)] (if (< x -1.0) -1.0 (if (> x 1.0) 1.0 x))))
 
-(defn neighborhood-4 [[^long x ^long y]]
+(defn neighborhood-4 [[x y]]
   (map vector
        ((juxt inc identity dec identity) x)
        ((juxt identity inc identity dec) y)))
 
-(defn neighborhood-5 [[^long x ^long y]]
+(defn neighborhood-5 [[x y]]
   (map vector
        ((juxt inc identity dec identity identity) x)
        ((juxt identity inc identity dec identity) y)))
@@ -124,13 +124,13 @@
 (def neighborhood-8-x (juxt inc inc identity dec dec dec identity inc))
 (def neighborhood-8-y (juxt identity inc inc inc identity dec dec dec))
 
-(defn neighborhood-8 [cell-maker-f [^long x ^long y]]
+(defn neighborhood-8 [cell-maker-f [x y]]
   (map cell-maker-f (neighborhood-8-x x) (neighborhood-8-y y)))
 
 (def neighborhood-9-x (juxt inc inc identity dec dec dec identity inc identity))
 (def neighborhood-9-y (juxt identity inc inc inc identity dec dec dec identity))
 
-(defn neighborhood-9 [cell-maker-f [^long x ^long y]]
+(defn neighborhood-9 [cell-maker-f [x y]]
   (map cell-maker-f (neighborhood-9-x x) (neighborhood-9-y y)))
 
 (defn neighbor-freq-8
@@ -196,17 +196,17 @@
      (if (fn? successor)
        (successor)
        successor)))
-  ([^long g w]
-   (let [index (volatile! -1)]
+  ([g w]
+   (let [index (volatile! (long -1))]
      (fn context-sensitive-call [successor]
-       (vswap! index #(inc ^long %))
+       (vswap! index #(inc (long %)))
        (if (fn? successor)
-         (successor g w ^long @index (get w @index))
+         (successor g w @index (get w @index))
          successor)))))
 
-(defn exist?
+(defn exist
   "Returns a cell if destiny will allow, or mother nature brings it to life."
-  [survive? birth? cells [cell ^long neighbor-count]]
+  [survive? birth? cells [cell neighbor-count]]
   (if (cells cell)
     (when (survive? neighbor-count) cell)
     (when (birth? neighbor-count) cell)))
@@ -232,10 +232,10 @@
   ([g w]
    (map (call g w))))
 
-(defn existing?
+(defn existing
   "Returns an existence-determining transducer."
   [survive? birth? cells]
-  (keep (partial exist? survive? birth? cells)))
+  (keep (partial exist survive? birth? cells)))
 
 
 ; -----------------------------------------------------------------------------
@@ -245,10 +245,10 @@
   "Returns a function that, when called, will call f with an incremented
    generation number and an additional context argument."
   [f]
-  (let [generation (volatile! -1)]
+  (let [generation (volatile! (long -1))]
     (fn
       [data]
-      (vswap! generation #(inc ^long %))
+      (vswap! generation #(inc (long %)))
       (f @generation data))))
 
 
@@ -273,7 +273,7 @@
 (defn ca-xf
   [survive? birth? cells]
   ; TODO comp in a trim function based on the grid size/behavior rules.
-  (existing? survive? birth? cells))
+  (existing survive? birth? cells))
 
 (defn ca-sequence
   [survive? birth? neighbor-freq-f cell-maker-f seed]

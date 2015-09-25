@@ -1,7 +1,7 @@
-(ns ion.ergo.l-system-test
+(ns ion.ergo.core-test
   (:require #?(:clj  [clojure.test :refer :all]
                :cljs [cljs.test :refer-macros [deftest is testing]])
-                     [ion.ergo.l-system :refer :all]))
+                     [ion.ergo.core :refer :all]))
 
 (deftest rewrite-test
   (let [rules {:A [:B :A :B]}]
@@ -12,12 +12,12 @@
 (deftest basic-system-test
   (let [axiom [0]
         rules {0 [0 1] 1 [0]}
-        system (basic-system axiom rules)]
+        system (basic-rewriting-system axiom rules)]
     (is (= 144 (-> system (nth 10) count)))))
 
 (deftest functional-system-test
   (let [axiom #(vec [(rand-int 2)])
         rules {0 [0 1] 1 [0]}
-        system (functional-system axiom rules)
+        system (functional-rewriting-system axiom rules)
         size (-> system (nth 10) count)]
     (is (or (= 89 size) (= 144 size)))))
