@@ -51,8 +51,9 @@
      (y [_] y-coord)
      Object
      (equals [_ that]
-       (and (instance? Cell that) (and (= x-coord (.-x-coord ^Cell that))
-                                       (= y-coord (.-y-coord ^Cell that)))))
+       (or (and (instance? Cell that) (and (= x-coord (.-x-coord ^Cell that))
+                                           (= y-coord (.-y-coord ^Cell that))))
+           (= [x-coord y-coord] that)))
      (hashCode [_] (hash [x-coord y-coord]))
      clojure.lang.Indexed
      (nth [_ i]
@@ -89,7 +90,7 @@
    (defmethod clojure.core/print-method Cell [this ^java.io.Writer writer]
      (.write writer (str "<Cell " (position this) ">"))))
 
-(defn cell [x y]
+(defn cell [[x y]]
   (->Cell x y))
 
 (defn ^boolean cell?
@@ -124,22 +125,22 @@
 (def neighborhood-8-x (juxt inc inc identity dec dec dec identity inc))
 (def neighborhood-8-y (juxt identity inc inc inc identity dec dec dec))
 
-(defn neighborhood-8 [cell-maker-f [x y]]
-  (map cell-maker-f (neighborhood-8-x x) (neighborhood-8-y y)))
+(defn neighborhood-8 [[x y]]
+  (map vector (neighborhood-8-x x) (neighborhood-8-y y)))
 
 (def neighborhood-9-x (juxt inc inc identity dec dec dec identity inc identity))
 (def neighborhood-9-y (juxt identity inc inc inc identity dec dec dec identity))
 
-(defn neighborhood-9 [cell-maker-f [x y]]
-  (map cell-maker-f (neighborhood-9-x x) (neighborhood-9-y y)))
+(defn neighborhood-9 [[x y]]
+  (map vector (neighborhood-9-x x) (neighborhood-9-y y)))
 
 (defn neighbor-freq-8
-  "Returns a map of cell, neighbor-count pairs."
-  [cell-maker-f cells]
-  (frequencies (mapcat (partial neighborhood-8 cell-maker-f) cells)))
+  "Returns a map of [x y] neighbor-count pairs."
+  [cells]
+  (frequencies (mapcat neighborhood-8 cells)))
 
 (defn neighbor-freq-9
-  "Returns a map of cell, neighbor-count pairs."
+  "Returns a map of [x y] neighbor-count pairs."
   [cells]
   (frequencies (mapcat neighborhood-9 cells)))
 
@@ -206,10 +207,10 @@
 
 (defn exist
   "Returns a cell if destiny will allow, or mother nature brings it to life."
-  [survive? birth? cells [cell neighbor-count]]
-  (if (cells cell)
-    (when (survive? neighbor-count) cell)
-    (when (birth? neighbor-count) cell)))
+  [survive? birth? cell-maker-f cells [cell-position neighbor-count]]
+  (if (cells cell-position)
+    (when (survive? neighbor-count) (cell-maker-f cell-position))
+    (when (birth? neighbor-count) (cell-maker-f cell-position))))
 
 
 ; -----------------------------------------------------------------------------
@@ -234,8 +235,8 @@
 
 (defn existing
   "Returns an existence-determining transducer."
-  [survive? birth? cells]
-  (keep (partial exist survive? birth? cells)))
+  [survive? birth? cell-maker-f cells]
+  (keep (partial exist survive? birth? cell-maker-f cells)))
 
 
 ; -----------------------------------------------------------------------------
@@ -271,15 +272,16 @@
   (key patternpedia))
 
 (defn ca-xf
-  [survive? birth? cells]
+  [survive? birth? cell-maker-f cells]
   ; TODO comp in a trim function based on the grid size/behavior rules.
-  (existing survive? birth? cells))
+  (existing survive? birth? cell-maker-f cells))
 
 (defn ca-sequence
   [survive? birth? neighbor-freq-f cell-maker-f seed]
-  (let [seed (into #{} (map #(apply cell-maker-f %)) seed)
-        n-freq (partial neighbor-freq-f cell-maker-f)]
-    (ca-system seed n-freq (partial ca-xf survive? birth?))))
+  (let [seed (into #{} (map cell-maker-f) seed)
+        prep-f neighbor-freq-f
+        get-xf (partial ca-xf survive? birth? cell-maker-f)]
+    (ca-system seed prep-f get-xf)))
 
 (defn ca-builder
   [rule-key cell-maker-f seed]
@@ -288,7 +290,7 @@
 
 (comment ; Conway's Game of Life example using Acorn pattern as the seed.
 
-  (-> (ca-builder :conway-game-of-life vector (pattern :acorn)) (nth 10))
+  (-> (ca-builder :conway-game-of-life identity (pattern :acorn)) (nth 10))
 
   (-> (ca-builder :conway-game-of-life cell (pattern :acorn)) (nth 10))
 
