@@ -25,77 +25,69 @@
 ; -----------------------------------------------------------------------------
 ; Protocols / Records / Types
 
-(defprotocol Rewritable
+(defprotocol IRewritable
   (module [this]))
 
-(defprotocol Positioned
+(defprotocol IPosition
   (position [this])
   (x [this])
   (y [this])
   (z [this]))
 
-;(defn dist [p1 p2]
-;  (js/Math.sqrt (+ (js/Math.pow (- (x p2) (x p1)) 2)
-;                   (js/Math.pow (- (y p2) (y p1)) 2))))
-
-;(extend-protocol Positioned
-;  PersistentVector
-;  (x [v] (get v 0))
-;  (y [v] (get v 1)))
+(extend-protocol IPosition
+  clojure.lang.PersistentVector
+  (position [v] v)
+  (x [v] (get v 0))
+  (y [v] (get v 1))
+  (z [v] (get v 2)))
 
 #?(:clj
    (deftype Cell [x-coord y-coord]
-     Positioned
+     IPosition
      (position [_] [x-coord y-coord])
      (x [_] x-coord)
      (y [_] y-coord)
      Object
-     (equals [_ that]
-       (or (and (instance? Cell that) (and (= x-coord (.-x-coord ^Cell that))
-                                           (= y-coord (.-y-coord ^Cell that))))
-           (= [x-coord y-coord] that)))
+     (equals [_ o]
+       (and (satisfies? IPosition o)
+            (and (= x-coord (x ^Cell o))
+                 (= y-coord (y ^Cell o)))))
      (hashCode [_] (hash [x-coord y-coord]))
-     clojure.lang.Indexed
-     (nth [_ i]
-       (case i
-         0 x-coord
-         1 y-coord
-         (throw (IllegalArgumentException.))))
-     (nth [this i _] (nth this i))))
-
-#?(:cljs
-   (deftype Cell [x-coord y-coord]
-     Positioned
-     (position [_] [x-coord y-coord])
-     (x [_] x-coord)
-     (y [_] y-coord)
-     IEquiv
-     (-equiv [_ that]
-       (and (instance? Cell that) (and (= x-coord (.-x-coord ^Cell that))
-                                       (= y-coord (.-y-coord ^Cell that)))))
-     IHash
-     (-hash [_] (hash [x-coord y-coord]))
-     IIndexed
-     (-nth [_ i]
-       (case i
-         0 x-coord
-         1 y-coord))
-     (-nth [_ i not-found]
-       (case i
-         0 x-coord
-         1 y-coord
-         not-found))))
+     ))
 
 #?(:clj
    (defmethod clojure.core/print-method Cell [this ^java.io.Writer writer]
      (.write writer (str "<Cell " (position this) ">"))))
 
-(defn cell [[x y]]
-  (->Cell x y))
+#?(:cljs
+   (deftype Cell [x-coord y-coord]
+     IPosition
+     (position [_] [x-coord y-coord])
+     (x [_] x-coord)
+     (y [_] y-coord)
+     IEquiv
+     (-equiv [_ o]
+       (and (instance? Cell o)
+            (and (= x-coord (x ^Cell o))
+                 (= y-coord (y ^Cell o)))))
+     IHash
+     (-hash [_] (hash [x-coord y-coord]))))
 
-(defn ^boolean cell?
-  [that]
-  (instance? Cell that))
+(defn basic-cell
+  ([[x y]]
+   (->Cell x y))
+  ([[x y] cells]
+   (->Cell x y))
+  ([[x y] cells cell]
+   (->Cell x y)))
+
+(defn vector-cell
+  ([v]
+   v)
+  ([v _]
+   v)
+  ([v _ _]
+   v))
 
 
 ; -----------------------------------------------------------------------------
@@ -112,15 +104,17 @@
 (defn clamp-normalized [x]
   (let [x (double x)] (if (< x -1.0) -1.0 (if (> x 1.0) 1.0 x))))
 
+(def neighborhood-4-x (juxt inc identity dec identity))
+(def neighborhood-4-y (juxt identity inc identity dec))
+
 (defn neighborhood-4 [[x y]]
-  (map vector
-       ((juxt inc identity dec identity) x)
-       ((juxt identity inc identity dec) y)))
+  (map vector (neighborhood-4-x x) (neighborhood-4-y y)))
+
+(def neighborhood-5-x (juxt inc identity dec identity identity))
+(def neighborhood-5-y (juxt identity inc identity dec identity))
 
 (defn neighborhood-5 [[x y]]
-  (map vector
-       ((juxt inc identity dec identity identity) x)
-       ((juxt identity inc identity dec identity) y)))
+  (map vector (neighborhood-5-x x) (neighborhood-5-y y)))
 
 (def neighborhood-8-x (juxt inc inc identity dec dec dec identity inc))
 (def neighborhood-8-y (juxt identity inc inc inc identity dec dec dec))
@@ -134,15 +128,25 @@
 (defn neighborhood-9 [[x y]]
   (map vector (neighborhood-9-x x) (neighborhood-9-y y)))
 
+(defn neighbor-freq-4
+  "Returns a map of [x y] neighbor-count pairs."
+  [cells]
+  (frequencies (mapcat #(neighborhood-4 (position %)) cells)))
+
+(defn neighbor-freq-5
+  "Returns a map of [x y] neighbor-count pairs."
+  [cells]
+  (frequencies (mapcat #(neighborhood-5 (position %)) cells)))
+
 (defn neighbor-freq-8
   "Returns a map of [x y] neighbor-count pairs."
   [cells]
-  (frequencies (mapcat neighborhood-8 cells)))
+  (frequencies (mapcat #(neighborhood-8 (position %)) cells)))
 
 (defn neighbor-freq-9
   "Returns a map of [x y] neighbor-count pairs."
   [cells]
-  (frequencies (mapcat neighborhood-9 cells)))
+  (frequencies (mapcat #(neighborhood-9 (position %)) cells)))
 
 
 ; -----------------------------------------------------------------------------
@@ -181,7 +185,7 @@
   "Returns the module or the module supplied by an object implementing the
    Rewrite protocol."
   [m]
-  (if (satisfies? Rewritable m) (module m) m))
+  (if (satisfies? IRewritable m) (module m) m))
 
 (defn rewrite
   "Returns a successor, which must be a vector or a function. If no match is
@@ -208,9 +212,9 @@
 (defn exist
   "Returns a cell if destiny will allow, or mother nature brings it to life."
   [survive? birth? cell-maker-f cells [cell-position neighbor-count]]
-  (if (cells cell-position)
-    (when (survive? neighbor-count) (cell-maker-f cell-position))
-    (when (birth? neighbor-count) (cell-maker-f cell-position))))
+  (if-let [cell (cells (cell-maker-f cell-position))]
+    (when (survive? neighbor-count) (cell-maker-f cell-position cells cell))
+    (when (birth? neighbor-count) (cell-maker-f cell-position cells))))
 
 
 ; -----------------------------------------------------------------------------
@@ -290,9 +294,9 @@
 
 (comment ; Conway's Game of Life example using Acorn pattern as the seed.
 
-  (-> (ca-builder :conway-game-of-life identity (pattern :acorn)) (nth 10))
+  (-> (ca-builder :conway-game-of-life vector-cell (pattern :acorn)) (nth 10))
 
-  (-> (ca-builder :conway-game-of-life cell (pattern :acorn)) (nth 10))
+  (-> (ca-builder :conway-game-of-life basic-cell (pattern :acorn)) (nth 10))
 
   )
 

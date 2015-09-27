@@ -1,4 +1,4 @@
-(ns ion.ergo.l-system-conway
+(ns ion.ergo.life-like-cellular-automata
   (:require #?(:clj  [clojure.test :refer :all]
                :cljs [cljs.test :refer-macros [deftest is testing]])
                      [criterium.core :as cr]
@@ -7,6 +7,38 @@
 
 ;; -----------------------------------------------------------------------------
 ;; Research & Development
+
+;#?(:clj
+;   (deftype Cell [x-coord y-coord]
+;     IPosition
+;     (position [_] [x-coord y-coord])
+;     (x [_] x-coord)
+;     (y [_] y-coord)
+;     Indexed
+;     (nth [_ i]
+;       (case i
+;         0 x-coord
+;         1 y-coord
+;         (throw (IllegalArgumentException.))))
+;     (nth [this i _] (nth this i))
+;     IPersistentCollection
+;     (equiv [_ o]
+;       (or (and (instance? Cell o) (and (= x-coord (.-x-coord ^Cell o))
+;                                        (= y-coord (.-y-coord ^Cell o))))
+;           (= [x-coord y-coord] o)))
+;     (seq [this] (seq [x-coord y-coord]))
+;     IPersistentVector
+;     (length [_] 2)
+;     ISeq
+;     (first [_] (first [x-coord y-coord]))
+;     (more [_] (rest [x-coord y-coord]))
+;     (next [_] (next [x-coord y-coord]))
+;     java.util.Collection
+;     (size [_] 2)
+;     (iterator [_] (.iterator [x-coord y-coord]))
+;     Object
+;     (equals [this o] (.equiv this o))
+;     (hashCode [_] (hash [x-coord y-coord]))))
 
 (def neighborhood-8-x (juxt inc inc identity dec dec dec identity inc))
 (def neighborhood-8-y (juxt identity inc inc inc identity dec dec dec))
@@ -78,12 +110,12 @@
 
   (cr/with-progress-reporting
     (cr/quick-bench ; Production Version
-      (count (-> (ergo/ca-builder :conway-game-of-life identity
+      (count (-> (ergo/ca-builder :conway-game-of-life ergo/vector-cell
                                   (ergo/pattern :acorn)) (nth 100))) :verbose))
 
   (cr/with-progress-reporting
     (cr/quick-bench
-      (count (-> (ergo/ca-builder :conway-game-of-life ergo/cell
+      (count (-> (ergo/ca-builder :conway-game-of-life ergo/basic-cell
                                   (ergo/pattern :acorn)) (nth 100))) :verbose))
 
   (cr/with-progress-reporting
