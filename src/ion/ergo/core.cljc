@@ -52,8 +52,7 @@
        (and (satisfies? IPosition o)
             (and (= x-coord (x ^Cell o))
                  (= y-coord (y ^Cell o)))))
-     (hashCode [_] (hash [x-coord y-coord]))
-     ))
+     (hashCode [_] (hash [x-coord y-coord]))))
 
 #?(:clj
    (defmethod clojure.core/print-method Cell [this ^java.io.Writer writer]
@@ -82,11 +81,11 @@
    (->Cell x y)))
 
 (defn vector-cell
-  ([v]
+  ([v] ; Candidate cell, only used temporarily to test set membership.
    v)
-  ([v _]
+  ([v cells] ; Newborn cell.
    v)
-  ([v _ _]
+  ([v cells cell] ; Survivor.
    v))
 
 
@@ -107,7 +106,7 @@
 (def neighborhood-4-x (juxt inc identity dec identity))
 (def neighborhood-4-y (juxt identity inc identity dec))
 
-(defn neighborhood-4 [[x y]]
+(defn neighborhood-4 [[x y]] ; von Neumann neighborhood.
   (map vector (neighborhood-4-x x) (neighborhood-4-y y)))
 
 (def neighborhood-5-x (juxt inc identity dec identity identity))
@@ -119,7 +118,7 @@
 (def neighborhood-8-x (juxt inc inc identity dec dec dec identity inc))
 (def neighborhood-8-y (juxt identity inc inc inc identity dec dec dec))
 
-(defn neighborhood-8 [[x y]]
+(defn neighborhood-8 [[x y]] ; Moore neighborhood.
   (map vector (neighborhood-8-x x) (neighborhood-8-y y)))
 
 (def neighborhood-9-x (juxt inc inc identity dec dec dec identity inc identity))
