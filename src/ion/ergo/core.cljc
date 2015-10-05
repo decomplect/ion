@@ -135,6 +135,26 @@
   [[x y]]
   (map vector (neighborhood-9-x x) (neighborhood-9-y y)))
 
+(defn hi->xy
+  "Returns the [x y] coordinates for index based on the height of some grid."
+  [h i]
+  (let [h (long h)
+        i (long i)
+        x (quot i h)
+        y (mod i h)]
+    [x y]))
+
+(defn whxy->i
+  "Returns the index for the [x y] coordinates with toroidal adjustments
+   applied to the x and y values."
+  [w h [x y]]
+  (let [w (long w)
+        h (long h)
+        x (long (mod x w))
+        y (long (mod y h))
+        i (+ (* x h) y)]
+    i))
+
 
 ; -----------------------------------------------------------------------------
 ; Recursive Axiomatic Transducible Sequence (RATS) Producer
@@ -150,6 +170,10 @@
                 (let [new-coll (into (empty coll) (get-xf coll) (prep-f coll))]
                   (cons new-coll (process new-coll))))))]
     (process seed)))
+
+(defn dense-ca-system
+  [seed get-xf]
+  (cons seed (produce seed identity get-xf)))
 
 (defn sparse-ca-system
   [seed prep-f get-xf]
@@ -242,10 +266,82 @@
   [k]
   (k patternpedia))
 
-(defn neighbor-freq
+(defn neighbor-frequencies
   "Returns a map of [x y] neighbor-count pairs for a set of cells."
   [neighborhood-f cells]
   (frequencies (mapcat #(neighborhood-f (position %)) cells)))
+
+
+; -----------------------------------------------------------------------------
+; Densely-Populated Cellular Automata
+
+(defn make-neighbors-index
+  "Returns a vector of vectors of neighbors for each cell."
+  [w h neighborhood-f]
+  (let [xy->i (partial whxy->i w h)]
+    (into [] (for [x (range w)
+                   y (range h)]
+               (vec (map xy->i (neighborhood-f [x y])))))))
+
+(defn make-seed
+  "Returns a vector of values based on calling f, which should return a lazy
+   infinite sequence."
+  [w h f]
+  (vec (take (* (long w) (long h)) (f))))
+
+(defn get-neighbors
+  "Returns a lazy sequence of neighbors of the cell at index in word."
+  [word neighbors-index index]
+  (map #(nth word %) (nth neighbors-index index)))
+
+(defn neighborhood-sensitive-value
+  "Returns a neighborhood-sensitive value by calling f with the generation,
+   current cell value and a lazy sequence of neighbors."
+  [generation word neighbors-index f]
+  (let [index (volatile! (long -1))]
+    (fn context-sensitive-value [cell-value]
+      (vswap! index #(inc (long %)))
+      (let [neighbors (get-neighbors word neighbors-index @index)]
+        (f generation cell-value neighbors)))))
+
+(defn neighborhood-sensitive-valuing [generation word neighbors-index f]
+  "Returns a neighborhood-sensitive value-emiting transducer."
+  (map (neighborhood-sensitive-value generation word neighbors-index f)))
+
+(defn neighborhood-sensitive-dense-ca-system
+  "Returns a lazy sequence of words from a neighborhood-sensitive
+   densely-populated cellular automata process."
+  [w h neighborhood-f seed-f cell-f]
+  (let [neighbors-index (make-neighbors-index w h neighborhood-f)
+        seed (make-seed w h seed-f)]
+    (dense-ca-system seed (gen (fn [generation word]
+                                 (neighborhood-sensitive-valuing
+                                   generation word neighbors-index cell-f))))))
+
+(comment
+
+  (defn make-seed-for-age [w h]
+    (make-seed w h #(repeat (long 0))))
+
+  (def random-color (partial rand-int 360))
+
+  (defn make-seed-for-color [w h]
+    (make-seed w h #(repeatedly random-color)))
+
+  (defn cell-color
+    "Returns a color based on the colors of neighboring cells."
+    [generation cell-value neighbors]
+    (let [avg-color (quot (int (reduce + neighbors)) (count neighbors))]
+      (quot (+ (int cell-value) avg-color) (int 2))))
+
+  (defn example-color-ca-system []
+    (neighborhood-sensitive-dense-ca-system
+      72 36
+      neighborhood-8
+      #(repeatedly random-color)
+      cell-color))
+
+  )
 
 
 ; -----------------------------------------------------------------------------
@@ -258,6 +354,10 @@
   [k]
   (let [info (k lifepedia)]
     [(:S info) (:B info) (:N info)]))
+
+
+; -----------------------------------------------------------------------------
+; Sparse Life-Like Cellular Automata
 
 (defn sparse-life-exist
   "Returns a cell if destiny will allow, or mother nature brings it to life."
@@ -286,7 +386,7 @@
 (defn sparse-life-rule-system
   [rule-key cell-maker-f seed]
   (let [[survive? birth? neighborhood-f] (life-rules rule-key)
-        neighbor-freq-f (partial neighbor-freq neighborhood-f)]
+        neighbor-freq-f (partial neighbor-frequencies neighborhood-f)]
     (sparse-life-system survive? birth? neighbor-freq-f cell-maker-f seed)))
 
 (comment ; Conway's Game of Life example using Acorn pattern as the seed.
@@ -296,36 +396,6 @@
   (-> (sparse-life-rule-system :conway-game-of-life basic-cell (pattern :acorn)) (nth 10))
 
   )
-
-
-; -----------------------------------------------------------------------------
-; Life-Like Cellular Automata Rules
-
-(def lifepedia
-  {:conway-game-of-life
-   {:S #{2 3} :B #{3} :N neighborhood-8}
-   :gnarl
-   {:S #{1} :B #{1} :N neighborhood-8}
-   :replicator
-   {:S #{1 3 5 7} :B #{1 3 5 7} :N neighborhood-8}
-   :fredkin
-   {:S #{1 3 5 7 9} :B #{1 3 5 7 9} :N neighborhood-9}
-   })
-
-
-; -----------------------------------------------------------------------------
-; Cellular Automata Patterns
-
-(def patternpedia
-  {:acorn
-   #{[0 2] [1 0] [1 2] [3 1] [4 2] [5 2] [6 2]}
-   :blinker
-   #{[1 0] [1 1] [1 2]}
-   :glider
-   #{[1 0] [2 1] [0 2] [1 2] [2 2]}
-   :square
-   #{[1 0] [0 1] [1 1] [0 0]}
-   })
 
 
 ; -----------------------------------------------------------------------------
@@ -469,4 +539,34 @@
    {:descr "Binary sequence"
     :axiom [0]
     :rules {0 [0 1 0]}}
+   })
+
+
+; -----------------------------------------------------------------------------
+; Life-Like Cellular Automata Rules
+
+(def lifepedia
+  {:conway-game-of-life
+   {:S #{2 3} :B #{3} :N neighborhood-8}
+   :gnarl
+   {:S #{1} :B #{1} :N neighborhood-8}
+   :replicator
+   {:S #{1 3 5 7} :B #{1 3 5 7} :N neighborhood-8}
+   :fredkin
+   {:S #{1 3 5 7 9} :B #{1 3 5 7 9} :N neighborhood-9}
+   })
+
+
+; -----------------------------------------------------------------------------
+; Patterns for Cellular Automata
+
+(def patternpedia
+  {:acorn
+   #{[0 2] [1 0] [1 2] [3 1] [4 2] [5 2] [6 2]}
+   :blinker
+   #{[1 0] [1 1] [1 2]}
+   :glider
+   #{[1 0] [2 1] [0 2] [1 2] [2 2]}
+   :square
+   #{[1 0] [0 1] [1 1] [0 0]}
    })
