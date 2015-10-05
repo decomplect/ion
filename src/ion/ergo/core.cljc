@@ -106,46 +106,34 @@
 (def neighborhood-4-x (juxt inc identity dec identity))
 (def neighborhood-4-y (juxt identity inc identity dec))
 
-(defn neighborhood-4 [[x y]] ; von Neumann neighborhood.
+(defn neighborhood-4
+  "Returns a vector of 4 [x y] pairs of a von Neumann neighborhood."
+  [[x y]]
   (map vector (neighborhood-4-x x) (neighborhood-4-y y)))
 
 (def neighborhood-5-x (juxt inc identity dec identity identity))
 (def neighborhood-5-y (juxt identity inc identity dec identity))
 
-(defn neighborhood-5 [[x y]]
+(defn neighborhood-5
+  "Returns a vector of 5 [x y] pairs of a von Neumann + Origin neighborhood."
+  [[x y]]
   (map vector (neighborhood-5-x x) (neighborhood-5-y y)))
 
 (def neighborhood-8-x (juxt inc inc identity dec dec dec identity inc))
 (def neighborhood-8-y (juxt identity inc inc inc identity dec dec dec))
 
-(defn neighborhood-8 [[x y]] ; Moore neighborhood.
+(defn neighborhood-8
+  "Returns a vector of 8 [x y] pairs of a Moore neighborhood."
+  [[x y]]
   (map vector (neighborhood-8-x x) (neighborhood-8-y y)))
 
 (def neighborhood-9-x (juxt inc inc identity dec dec dec identity inc identity))
 (def neighborhood-9-y (juxt identity inc inc inc identity dec dec dec identity))
 
-(defn neighborhood-9 [[x y]]
+(defn neighborhood-9
+  "Returns a vector of 9 [x y] pairs of a Moore + Origin neighborhood."
+  [[x y]]
   (map vector (neighborhood-9-x x) (neighborhood-9-y y)))
-
-(defn neighbor-freq-4
-  "Returns a map of [x y] neighbor-count pairs."
-  [cells]
-  (frequencies (mapcat #(neighborhood-4 (position %)) cells)))
-
-(defn neighbor-freq-5
-  "Returns a map of [x y] neighbor-count pairs."
-  [cells]
-  (frequencies (mapcat #(neighborhood-5 (position %)) cells)))
-
-(defn neighbor-freq-8
-  "Returns a map of [x y] neighbor-count pairs."
-  [cells]
-  (frequencies (mapcat #(neighborhood-8 (position %)) cells)))
-
-(defn neighbor-freq-9
-  "Returns a map of [x y] neighbor-count pairs."
-  [cells]
-  (frequencies (mapcat #(neighborhood-9 (position %)) cells)))
 
 
 ; -----------------------------------------------------------------------------
@@ -163,7 +151,7 @@
                   (cons new-coll (process new-coll))))))]
     (process seed)))
 
-(defn ca-system
+(defn sparse-ca-system
   [seed prep-f get-xf]
   (cons (set seed) (produce (set seed) prep-f get-xf)))
 
@@ -200,20 +188,13 @@
      (if (fn? successor)
        (successor)
        successor)))
-  ([g w]
+  ([generation word]
    (let [index (volatile! (long -1))]
      (fn context-sensitive-call [successor]
        (vswap! index #(inc (long %)))
        (if (fn? successor)
-         (successor g w @index (get w @index))
+         (successor generation word @index (get word @index))
          successor)))))
-
-(defn exist
-  "Returns a cell if destiny will allow, or mother nature brings it to life."
-  [survive? birth? cell-maker-f cells [cell-position neighbor-count]]
-  (if-let [cell (cells (cell-maker-f cell-position))]
-    (when (survive? neighbor-count) (cell-maker-f cell-position cells cell))
-    (when (birth? neighbor-count) (cell-maker-f cell-position cells))))
 
 
 ; -----------------------------------------------------------------------------
@@ -233,13 +214,8 @@
   "Returns a function-calling transducer."
   ([]
    (map (call)))
-  ([g w]
-   (map (call g w))))
-
-(defn existing
-  "Returns an existence-determining transducer."
-  [survive? birth? cell-maker-f cells]
-  (keep (partial exist survive? birth? cell-maker-f cells)))
+  ([generation word]
+   (map (call generation word))))
 
 
 ; -----------------------------------------------------------------------------
@@ -259,68 +235,96 @@
 ; -----------------------------------------------------------------------------
 ; Cellular Automata
 
-(declare cellupedia)
-
-(defn ca-rules
-  "Returns the [survive? birth? neighbor-freq] rules trifecta from cellupedia."
-  [key]
-  (let [info (key cellupedia)]
-    [(:S info) (:B info) (:N info)]))
-
 (declare patternpedia)
 
 (defn pattern
   "Returns the set of cells specified by the key from the patternpedia."
-  [key]
-  (key patternpedia))
+  [k]
+  (k patternpedia))
 
-(defn ca-xf
+(defn neighbor-freq
+  "Returns a map of [x y] neighbor-count pairs for a set of cells."
+  [neighborhood-f cells]
+  (frequencies (mapcat #(neighborhood-f (position %)) cells)))
+
+
+; -----------------------------------------------------------------------------
+; Life-Like Cellular Automata
+
+(declare lifepedia)
+
+(defn life-rules
+  "Returns the [survive? birth? neighborhood] rules trifecta from lifepedia."
+  [k]
+  (let [info (k lifepedia)]
+    [(:S info) (:B info) (:N info)]))
+
+(defn sparse-life-exist
+  "Returns a cell if destiny will allow, or mother nature brings it to life."
+  [survive? birth? cell-maker-f cells [cell-position neighbor-count]]
+  (if-let [cell (cells (cell-maker-f cell-position))]
+    (when (survive? neighbor-count) (cell-maker-f cell-position cells cell))
+    (when (birth? neighbor-count) (cell-maker-f cell-position cells))))
+
+(defn sparse-life-existing
+  "Returns an existence-determining transducer."
+  [survive? birth? cell-maker-f cells]
+  (keep (partial sparse-life-exist survive? birth? cell-maker-f cells)))
+
+(defn sparse-life-xf
   [survive? birth? cell-maker-f cells]
   ; TODO comp in a trim function based on the grid size/behavior rules.
-  (existing survive? birth? cell-maker-f cells))
+  (sparse-life-existing survive? birth? cell-maker-f cells))
 
-(defn ca-sequence
+(defn sparse-life-system
   [survive? birth? neighbor-freq-f cell-maker-f seed]
   (let [seed (into #{} (map cell-maker-f) seed)
         prep-f neighbor-freq-f
-        get-xf (partial ca-xf survive? birth? cell-maker-f)]
-    (ca-system seed prep-f get-xf)))
+        get-xf (partial sparse-life-xf survive? birth? cell-maker-f)]
+    (sparse-ca-system seed prep-f get-xf)))
 
-(defn ca-builder
+(defn sparse-life-rule-system
   [rule-key cell-maker-f seed]
-  (let [[survive? birth? neighbor-freq-f] (ca-rules rule-key)]
-    (ca-sequence survive? birth? neighbor-freq-f cell-maker-f seed)))
+  (let [[survive? birth? neighborhood-f] (life-rules rule-key)
+        neighbor-freq-f (partial neighbor-freq neighborhood-f)]
+    (sparse-life-system survive? birth? neighbor-freq-f cell-maker-f seed)))
 
 (comment ; Conway's Game of Life example using Acorn pattern as the seed.
 
-  (-> (ca-builder :conway-game-of-life vector-cell (pattern :acorn)) (nth 10))
+  (-> (sparse-life-rule-system :conway-game-of-life vector-cell (pattern :acorn)) (nth 10))
 
-  (-> (ca-builder :conway-game-of-life basic-cell (pattern :acorn)) (nth 10))
+  (-> (sparse-life-rule-system :conway-game-of-life basic-cell (pattern :acorn)) (nth 10))
 
   )
 
 
 ; -----------------------------------------------------------------------------
-; Patternpedia
+; Life-Like Cellular Automata Rules
 
-(def patternpedia
-  {:acorn
-   #{[70 62] [71 60] [71 62] [73 61] [74 62] [75 62] [76 62]}
+(def lifepedia
+  {:conway-game-of-life
+   {:S #{2 3} :B #{3} :N neighborhood-8}
+   :gnarl
+   {:S #{1} :B #{1} :N neighborhood-8}
+   :replicator
+   {:S #{1 3 5 7} :B #{1 3 5 7} :N neighborhood-8}
+   :fredkin
+   {:S #{1 3 5 7 9} :B #{1 3 5 7 9} :N neighborhood-9}
    })
 
 
 ; -----------------------------------------------------------------------------
-; Cellupedia
+; Cellular Automata Patterns
 
-(def cellupedia
-  {:conway-game-of-life
-   {:S #{2 3} :B #{3} :N neighbor-freq-8}
-   :gnarl
-   {:S #{1} :B #{1} :N neighbor-freq-8}
-   :replicator
-   {:S #{1 3 5 7} :B #{1 3 5 7} :N neighbor-freq-8}
-   :fredkin
-   {:S #{1 3 5 7 9} :B #{1 3 5 7 9} :N neighbor-freq-9}
+(def patternpedia
+  {:acorn
+   #{[0 2] [1 0] [1 2] [3 1] [4 2] [5 2] [6 2]}
+   :blinker
+   #{[1 0] [1 1] [1 2]}
+   :glider
+   #{[1 0] [2 1] [0 2] [1 2] [2 2]}
+   :square
+   #{[1 0] [0 1] [1 1] [0 0]}
    })
 
 
@@ -338,8 +342,8 @@
 (defn basic-rewriting-system
   "Returns a lazy sequence of words from a context-free rewriting process."
   [axiom rules]
-  (rewriting-system (gen (fn [g _]
-                           (comp (rewriting axiom rules g)
+  (rewriting-system (gen (fn [generation _]
+                           (comp (rewriting axiom rules generation)
                                  cat)))))
 
 (defn functional-rewriting-system
@@ -348,27 +352,27 @@
    called without passing it any arguments. The returned value may be
    deterministic or stochastic."
   [axiom rules]
-  (rewriting-system (gen (fn [g _]
-                           (comp (rewriting axiom rules g)
+  (rewriting-system (gen (fn [generation _]
+                           (comp (rewriting axiom rules generation)
                                  (calling)
                                  cat)))))
 
 (defn context-sensitive-rewriting-system
   "Returns a lazy sequence of words from a context-sensitive rewriting
    process. Allows a rewrite successor to (optionally) be a function that will
-   get called with the current context (g w i m) as arguments."
+   get called with the current context (generation word index module) as args."
   [axiom rules]
-  (rewriting-system (gen (fn [g w]
-                           (comp (rewriting axiom rules g)
-                                 (calling g w)
+  (rewriting-system (gen (fn [generation word]
+                           (comp (rewriting axiom rules generation)
+                                 (calling generation word)
                                  cat)))))
 
 (defn parametric-rewriting-system
   "Returns a lazy sequence of words from a context-free rewriting process."
   [axiom rules]
-  (rewriting-system (gen (fn [g _]
+  (rewriting-system (gen (fn [generation _]
                            (comp (modulating)
-                                 (rewriting axiom rules g)
+                                 (rewriting axiom rules generation)
                                  cat)))))
 
 (defn parametric-functional-rewriting-system
@@ -377,21 +381,21 @@
    called without passing it any arguments. The returned value may be
    deterministic or stochastic."
   [axiom rules]
-  (rewriting-system (gen (fn [g _]
+  (rewriting-system (gen (fn [generation _]
                            (comp (modulating)
-                                 (rewriting axiom rules g)
+                                 (rewriting axiom rules generation)
                                  (calling)
                                  cat)))))
 
 (defn parametric-context-sensitive-rewriting-system
   "Returns a lazy sequence of words from a context-sensitive rewriting
    process. Allows a rewrite successor to (optionally) be a function that will
-   get called with the current context (g w i m) as arguments."
+   get called with the current context (generation word index module) as args."
   [axiom rules]
-  (rewriting-system (gen (fn [g w]
+  (rewriting-system (gen (fn [generation word]
                            (comp (modulating)
-                                 (rewriting axiom rules g)
-                                 (calling g w)
+                                 (rewriting axiom rules generation)
+                                 (calling generation word)
                                  cat)))))
 
 (comment ; A basic example.
