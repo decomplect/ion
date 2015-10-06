@@ -73,11 +73,11 @@
      (-hash [_] (hash [x-coord y-coord]))))
 
 (defn basic-cell
-  ([[x y]]
+  ([[x y]] ; Candidate cell, only used temporarily to test set membership.
    (->Cell x y))
-  ([[x y] cells]
+  ([[x y] cells] ; Newborn cell.
    (->Cell x y))
-  ([[x y] cells cell]
+  ([[x y] cells cell] ; Survivor.
    (->Cell x y)))
 
 (defn vector-cell
@@ -135,8 +135,14 @@
   [[x y]]
   (map vector (neighborhood-9-x x) (neighborhood-9-y y)))
 
+(defn neighbor-frequencies
+  "Returns a map of [x y] neighbor-count pairs for a set of cells based on the
+   neighborhood function."
+  [neighborhood-f cells]
+  (frequencies (mapcat #(neighborhood-f (position %)) cells)))
+
 (defn hi->xy
-  "Returns the [x y] coordinates for index based on the height of some grid."
+  "Returns the [x y] coordinates for index based on the height of the grid."
   [h i]
   (let [h (long h)
         i (long i)
@@ -146,7 +152,7 @@
 
 (defn whxy->i
   "Returns the index for the [x y] coordinates with toroidal adjustments
-   applied to the x and y values."
+   applied to the x and y values based on the grid width and grid height."
   [w h [x y]]
   (let [w (long w)
         h (long h)
@@ -192,6 +198,21 @@
 ; -----------------------------------------------------------------------------
 ; Transformation Functions
 
+(defn get-neighbors
+  "Returns a lazy sequence of neighbors of the module at index in word."
+  [word neighbors-index index]
+  (map #(nth word %) (nth neighbors-index index)))
+
+(defn contextualize
+  "Returns a function that will return the module and its neighbors."
+  [word neighbors-index]
+  (let [index (volatile! (long -1))
+        get-n (partial get-neighbors word neighbors-index)]
+    (fn module-and-neighbors [m]
+      (vswap! index #(inc (long %)))
+      (let [neighbors (get-n @index)]
+        [m neighbors]))))
+
 (defn modulate
   "Returns the module or the module supplied by an object implementing the
    Rewrite protocol."
@@ -223,6 +244,11 @@
 
 ; -----------------------------------------------------------------------------
 ; Transducers
+
+(defn contextualizing
+  "Returns a module-and-neighbors contextualizing transducer."
+  [word neighbors-index]
+  (map (contextualize word neighbors-index)))
 
 (defn modulating
   "Returns a module-extracting transducer."
@@ -266,11 +292,6 @@
   [k]
   (k patternpedia))
 
-(defn neighbor-frequencies
-  "Returns a map of [x y] neighbor-count pairs for a set of cells."
-  [neighborhood-f cells]
-  (frequencies (mapcat #(neighborhood-f (position %)) cells)))
-
 
 ; -----------------------------------------------------------------------------
 ; Densely-Populated Cellular Automata
@@ -289,35 +310,6 @@
   [w h f]
   (vec (take (* (long w) (long h)) (f))))
 
-(defn get-neighbors
-  "Returns a lazy sequence of neighbors of the cell at index in word."
-  [word neighbors-index index]
-  (map #(nth word %) (nth neighbors-index index)))
-
-(defn neighborhood-sensitive-value
-  "Returns a neighborhood-sensitive value by calling f with the generation,
-   current cell value and a lazy sequence of neighbors."
-  [generation word neighbors-index f]
-  (let [index (volatile! (long -1))]
-    (fn context-sensitive-value [cell-value]
-      (vswap! index #(inc (long %)))
-      (let [neighbors (get-neighbors word neighbors-index @index)]
-        (f generation cell-value neighbors)))))
-
-(defn neighborhood-sensitive-valuing [generation word neighbors-index f]
-  "Returns a neighborhood-sensitive value-emiting transducer."
-  (map (neighborhood-sensitive-value generation word neighbors-index f)))
-
-(defn neighborhood-sensitive-dense-ca-system
-  "Returns a lazy sequence of words from a neighborhood-sensitive
-   densely-populated cellular automata process."
-  [w h neighborhood-f seed-f cell-f]
-  (let [neighbors-index (make-neighbors-index w h neighborhood-f)
-        seed (make-seed w h seed-f)]
-    (dense-ca-system seed (gen (fn [generation word]
-                                 (neighborhood-sensitive-valuing
-                                   generation word neighbors-index cell-f))))))
-
 (comment
 
   (defn make-seed-for-age [w h]
@@ -329,17 +321,30 @@
     (make-seed w h #(repeatedly random-color)))
 
   (defn cell-color
-    "Returns a color based on the colors of neighboring cells."
-    [generation cell-value neighbors]
-    (let [avg-color (quot (int (reduce + neighbors)) (count neighbors))]
-      (quot (+ (int cell-value) avg-color) (int 2))))
+    "Returns a color influenced by the colors of neighboring cells."
+    [[color neighbors]]
+    (let [color (int color)
+          n (int (count neighbors))
+          color-total (+ (* 200 color) (int (reduce + neighbors)))
+          color-count (+ 200 n)
+          color-average (quot color-total color-count)]
+      color-average))
 
-  (defn example-color-ca-system []
-    (neighborhood-sensitive-dense-ca-system
-      72 36
-      neighborhood-8
-      #(repeatedly random-color)
-      cell-color))
+  (defn cell-coloring
+    "Returns a cell-coloring transducer."
+    []
+    (map cell-color))
+
+  (defn example-color-ca-system [w h]
+    (let [seed (make-seed w h #(repeatedly random-color))
+          neighbors-index (make-neighbors-index w h neighborhood-8)]
+      (dense-ca-system
+        seed
+        (gen (fn [generation word]
+               (comp (contextualizing word neighbors-index)
+                     (cell-coloring)))))))
+
+  (def foo (example-color-ca-system 72 36))
 
   )
 
