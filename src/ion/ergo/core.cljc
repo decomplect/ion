@@ -1,5 +1,6 @@
 (ns ion.ergo.core
-  "A toolkit for the construction of generative systems.")
+  "Building blocks for the construction of generative systems; stepping stones
+   in the pursuit of algorithmic beauty within the garden of the mind.")
 
 (set! *warn-on-reflection* true)
 ;(set! *unchecked-math* :warn-on-boxed)
@@ -200,14 +201,14 @@
 
 (defn get-neighbors
   "Returns a lazy sequence of neighbors of the module at index in word."
-  [word neighbors-index index]
+  [neighbors-index word index]
   (map #(nth word %) (nth neighbors-index index)))
 
 (defn contextualize
   "Returns a function that will return the module and its neighbors."
-  [word neighbors-index]
+  [neighbors-index word]
   (let [index (volatile! (long -1))
-        get-n (partial get-neighbors word neighbors-index)]
+        get-n (partial get-neighbors neighbors-index word)]
     (fn module-and-neighbors [m]
       (vswap! index #(inc (long %)))
       (let [neighbors (get-n @index)]
@@ -247,8 +248,8 @@
 
 (defn contextualizing
   "Returns a module-and-neighbors contextualizing transducer."
-  [word neighbors-index]
-  (map (contextualize word neighbors-index)))
+  [neighbors-index word]
+  (map (contextualize neighbors-index word)))
 
 (defn modulating
   "Returns a module-extracting transducer."
@@ -298,7 +299,7 @@
 
 (defn make-neighbors-index
   "Returns a vector of vectors of neighbors for each cell."
-  [w h neighborhood-f]
+  [neighborhood-f w h]
   (let [xy->i (partial whxy->i w h)]
     (into [] (for [x (range w)
                    y (range h)]
@@ -307,44 +308,77 @@
 (defn make-seed
   "Returns a vector of values based on calling f, which should return a lazy
    infinite sequence."
-  [w h f]
+  [f w h]
   (vec (take (* (long w) (long h)) (f))))
 
 (comment
 
   (defn make-seed-for-age [w h]
-    (make-seed w h #(repeat (long 0))))
+    (make-seed #(repeat (long 0) w h)))
 
   (def random-color (partial rand-int 360))
 
-  (defn make-seed-for-color [w h]
-    (make-seed w h #(repeatedly random-color)))
+  (defn make-seed-for-random-color [w h]
+    (make-seed #(repeatedly random-color) w h))
 
-  (defn cell-color
+  (defn cell-color-blend
     "Returns a color influenced by the colors of neighboring cells."
-    [[color neighbors]]
-    (let [color (int color)
+    [weight [cell neighbors]]
+    (let [weight (int weight)
+          color (int cell)
           n (int (count neighbors))
-          color-total (+ (* 200 color) (int (reduce + neighbors)))
-          color-count (+ 200 n)
-          color-average (quot color-total color-count)]
-      color-average))
+          color-total (+ (* weight color) (int (reduce + neighbors)))
+          color-count (+ weight n)]
+      (quot color-total color-count)))
 
-  (defn cell-coloring
-    "Returns a cell-coloring transducer."
-    []
-    (map cell-color))
+  (defn cell-color-blending
+    "Returns a cell color-blending transducer."
+    [weight]
+    (map (partial cell-color-blend weight)))
 
-  (defn example-color-ca-system [w h]
-    (let [seed (make-seed w h #(repeatedly random-color))
-          neighbors-index (make-neighbors-index w h neighborhood-8)]
+  (defn example-color-blend-ca-system [w h]
+    (let [seed (make-seed-for-random-color w h)
+          neighbors-index (make-neighbors-index neighborhood-8 w h)
+          contextualizing (partial contextualizing neighbors-index)
+          coloring (cell-color-blending 200)]
       (dense-ca-system
         seed
         (gen (fn [generation word]
-               (comp (contextualizing word neighbors-index)
-                     (cell-coloring)))))))
+               (comp (contextualizing word)
+                     coloring))))))
 
-  (def foo (example-color-ca-system 72 36))
+  (def blend (example-color-ca-system 72 36))
+
+  (def random-life (partial rand-int 2))
+
+  (defn make-seed-for-random-life [w h]
+    (make-seed w h #(repeatedly random-life)))
+
+  (defn cell-life
+    "Returns a cell whose life status depends on neighboring cells."
+    [survive? birth? [cell neighbors]]
+    (let [live-neighbor-count (reduce + neighbors)]
+      (if (= cell 1)
+        (if (survive? live-neighbor-count) 1 0)
+        (if (birth? live-neighbor-count) 1 0))))
+
+  (defn cell-living
+    "Returns a cell living/dying transducer."
+    [survive? birth?]
+    (map (partial cell-life survive? birth?)))
+
+  (defn example-life-ca-system [survive? birth? nf w h]
+    (let [seed (make-seed-for-random-life w h)
+          neighbors-index (make-neighbors-index nf w h)
+          contextualizing (partial contextualizing neighbors-index)
+          living (cell-living survive? birth?)]
+      (dense-ca-system
+        seed
+        (gen (fn [generation word]
+               (comp (contextualizing word)
+                     living))))))
+
+  (defn gol (example-life-ca-system #{2 3} #{3} neighborhood-8 144 72))
 
   )
 
