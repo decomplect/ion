@@ -37,37 +37,31 @@
 (defn clamp-normalized [x]
   (let [x (double x)] (if (< x -1.0) -1.0 (if (> x 1.0) 1.0 x))))
 
+(defn neighborhood
+  "Returns a function that returns a vector of [x y] pairs of a neighborhood."
+  [nf-x nf-y]
+  (fn [[x y]]
+    (map vector (nf-x x) (nf-y y))))
+
 (def neighborhood-4-x (juxt inc identity dec identity))
 (def neighborhood-4-y (juxt identity inc identity dec))
 
-(defn neighborhood-4
-  "Returns a vector of 4 [x y] pairs of a von Neumann neighborhood."
-  [[x y]]
-  (map vector (neighborhood-4-x x) (neighborhood-4-y y)))
+(def neighborhood-4 (neighborhood neighborhood-4-x neighborhood-4-y))
 
 (def neighborhood-5-x (juxt inc identity dec identity identity))
 (def neighborhood-5-y (juxt identity inc identity dec identity))
 
-(defn neighborhood-5
-  "Returns a vector of 5 [x y] pairs of a von Neumann + Origin neighborhood."
-  [[x y]]
-  (map vector (neighborhood-5-x x) (neighborhood-5-y y)))
+(def neighborhood-5 (neighborhood neighborhood-5-x neighborhood-5-y))
 
 (def neighborhood-8-x (juxt inc inc identity dec dec dec identity inc))
 (def neighborhood-8-y (juxt identity inc inc inc identity dec dec dec))
 
-(defn neighborhood-8
-  "Returns a vector of 8 [x y] pairs of a Moore neighborhood."
-  [[x y]]
-  (map vector (neighborhood-8-x x) (neighborhood-8-y y)))
+(def neighborhood-8 (neighborhood neighborhood-8-x neighborhood-8-y))
 
 (def neighborhood-9-x (juxt inc inc identity dec dec dec identity inc identity))
 (def neighborhood-9-y (juxt identity inc inc inc identity dec dec dec identity))
 
-(defn neighborhood-9
-  "Returns a vector of 9 [x y] pairs of a Moore + Origin neighborhood."
-  [[x y]]
-  (map vector (neighborhood-9-x x) (neighborhood-9-y y)))
+(def neighborhood-9 (neighborhood neighborhood-9-x neighborhood-9-y))
 
 (defn hi->xy
   "Returns the [x y] coordinates for index based on the height of the grid."
