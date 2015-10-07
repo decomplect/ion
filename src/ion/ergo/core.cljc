@@ -1,6 +1,6 @@
 (ns ion.ergo.core
   "Building blocks for the construction of generative systems; stepping stones
-   in the pursuit of algorithmic beauty within the garden of the mind.")
+   for the pursuit of algorithmic beauty within the gardens of your mind.")
 
 (set! *warn-on-reflection* true)
 ;(set! *unchecked-math* :warn-on-boxed)
@@ -21,73 +21,6 @@
 
 (def ^:const DEG (/ 180.0 PI))
 (def ^:const RAD (/ PI 180.0))
-
-
-; -----------------------------------------------------------------------------
-; Protocols / Records / Types
-
-(defprotocol IRewritable
-  (module [this]))
-
-(defprotocol IPosition
-  (position [this])
-  (x [this])
-  (y [this])
-  (z [this]))
-
-(extend-protocol IPosition
-  clojure.lang.PersistentVector
-  (position [v] v)
-  (x [v] (get v 0))
-  (y [v] (get v 1))
-  (z [v] (get v 2)))
-
-#?(:clj
-   (deftype Cell [x-coord y-coord]
-     IPosition
-     (position [_] [x-coord y-coord])
-     (x [_] x-coord)
-     (y [_] y-coord)
-     Object
-     (equals [_ o]
-       (and (satisfies? IPosition o)
-            (and (= x-coord (x ^Cell o))
-                 (= y-coord (y ^Cell o)))))
-     (hashCode [_] (hash [x-coord y-coord]))))
-
-#?(:clj
-   (defmethod clojure.core/print-method Cell [this ^java.io.Writer writer]
-     (.write writer (str "<Cell " (position this) ">"))))
-
-#?(:cljs
-   (deftype Cell [x-coord y-coord]
-     IPosition
-     (position [_] [x-coord y-coord])
-     (x [_] x-coord)
-     (y [_] y-coord)
-     IEquiv
-     (-equiv [_ o]
-       (and (instance? Cell o)
-            (and (= x-coord (x ^Cell o))
-                 (= y-coord (y ^Cell o)))))
-     IHash
-     (-hash [_] (hash [x-coord y-coord]))))
-
-(defn basic-cell
-  ([[x y]] ; Candidate cell, only used temporarily to test set membership.
-   (->Cell x y))
-  ([[x y] cells] ; Newborn cell.
-   (->Cell x y))
-  ([[x y] cells cell] ; Survivor.
-   (->Cell x y)))
-
-(defn vector-cell
-  ([v] ; Candidate cell, only used temporarily to test set membership.
-   v)
-  ([v cells] ; Newborn cell.
-   v)
-  ([v cells cell] ; Survivor.
-   v))
 
 
 ; -----------------------------------------------------------------------------
@@ -136,12 +69,6 @@
   [[x y]]
   (map vector (neighborhood-9-x x) (neighborhood-9-y y)))
 
-(defn neighbor-frequencies
-  "Returns a map of [x y] neighbor-count pairs for a set of cells based on the
-   neighborhood function."
-  [neighborhood-f cells]
-  (frequencies (mapcat #(neighborhood-f (position %)) cells)))
-
 (defn hi->xy
   "Returns the [x y] coordinates for index based on the height of the grid."
   [h i]
@@ -178,14 +105,6 @@
                   (cons new-coll (process new-coll))))))]
     (process seed)))
 
-(defn dense-ca-system
-  [seed get-xf]
-  (cons seed (produce seed identity get-xf)))
-
-(defn sparse-ca-system
-  [seed prep-f get-xf]
-  (cons (set seed) (produce (set seed) prep-f get-xf)))
-
 (def rewriting-system (partial produce [::axiom] identity))
 
 (defn get-rewriting-rules
@@ -195,36 +114,42 @@
     {::axiom axiom}
     (if (fn? rules) (rules generation) rules)))
 
+(defn dense-ca-system
+  [seed get-xf]
+  (cons seed (produce seed identity get-xf)))
+
+(defn sparse-ca-system
+  [seed prep-f get-xf]
+  (cons (set seed) (produce (set seed) prep-f get-xf)))
+
 
 ; -----------------------------------------------------------------------------
 ; Transformation Functions
 
-(defn get-neighbors
-  "Returns a lazy sequence of neighbors of the module at index in word."
-  [neighbors-index word index]
-  (map #(nth word %) (nth neighbors-index index)))
-
-(defn contextualize
-  "Returns a function that will return the module and its neighbors."
-  [neighbors-index word]
-  (let [index (volatile! (long -1))
-        get-n (partial get-neighbors neighbors-index word)]
-    (fn module-and-neighbors [m]
-      (vswap! index #(inc (long %)))
-      (let [neighbors (get-n @index)]
-        [m neighbors]))))
+(defprotocol IRewritable
+  (module [this]))
 
 (defn modulate
-  "Returns the module or the module supplied by an object implementing the
+  "Returns the module, or the module supplied by an object implementing the
    Rewrite protocol."
   [m]
   (if (satisfies? IRewritable m) (module m) m))
+
+(defn modulating
+  "Returns a module-extracting transducer."
+  []
+  (map modulate))
 
 (defn rewrite
   "Returns a successor, which must be a vector or a function. If no match is
    found in the rules mapping, the original module is return within a vector."
   [rules m]
   (or (rules m) [m]))
+
+(defn rewriting
+  "Returns a rewriting transducer."
+  [axiom rules generation]
+  (map (partial rewrite (get-rewriting-rules axiom rules generation))))
 
 (defn call
   "Returns a function that will return the successor vector, or the result of
@@ -242,31 +167,47 @@
          (successor generation word @index (get word @index))
          successor)))))
 
-
-; -----------------------------------------------------------------------------
-; Transducers
-
-(defn contextualizing
-  "Returns a module-and-neighbors contextualizing transducer."
-  [neighbors-index word]
-  (map (contextualize neighbors-index word)))
-
-(defn modulating
-  "Returns a module-extracting transducer."
-  []
-  (map modulate))
-
-(defn rewriting
-  "Returns a rewriting transducer."
-  [axiom rules generation]
-  (map (partial rewrite (get-rewriting-rules axiom rules generation))))
-
 (defn calling
   "Returns a function-calling transducer."
   ([]
    (map (call)))
   ([generation word]
    (map (call generation word))))
+
+(defn get-neighbors
+  "Returns a lazy sequence of neighbors of the module at index in word."
+  [neighbors-index word index]
+  (map #(nth word %) (nth neighbors-index index)))
+
+(defn contextualize
+  "Returns a function that will return the module/cell and its neighbors."
+  [neighbors-index word]
+  (let [index (volatile! (long -1))
+        get-n (partial get-neighbors neighbors-index word)]
+    (fn module-and-neighbors [m]
+      (vswap! index #(inc (long %)))
+      (let [neighbors (get-n @index)]
+        [m neighbors]))))
+
+(defn contextualizing
+  "Returns a module/cell-and-neighbors contextualizing transducer."
+  [neighbors-index word]
+  (map (contextualize neighbors-index word)))
+
+(defn cell-life
+  "Returns a function that returns a cell whose fate depends on the number of
+   live neighboring cells."
+  [live-cell dead-cell alive? survive? birth?]
+  (fn cell-fate [[cell neighbors]]
+    (let [live-neighbor-count (count (filter alive? neighbors))]
+      (if (alive? cell)
+        (if (survive? live-neighbor-count) live-cell dead-cell)
+        (if (birth? live-neighbor-count) live-cell dead-cell)))))
+
+(defn cell-living
+  "Returns a cell living/dying transducer."
+  [live-cell dead-cell alive? survive? birth?]
+  (map (cell-life live-cell dead-cell alive? survive? birth?)))
 
 
 ; -----------------------------------------------------------------------------
@@ -281,160 +222,6 @@
       [data]
       (vswap! generation #(inc (long %)))
       (f @generation data))))
-
-
-; -----------------------------------------------------------------------------
-; Cellular Automata
-
-(declare patternpedia)
-
-(defn pattern
-  "Returns the set of cells specified by the key from the patternpedia."
-  [k]
-  (k patternpedia))
-
-
-; -----------------------------------------------------------------------------
-; Densely-Populated Cellular Automata
-
-(defn make-neighbors-index
-  "Returns a vector of vectors of neighbors for each cell."
-  [neighborhood-f w h]
-  (let [xy->i (partial whxy->i w h)]
-    (into [] (for [x (range w)
-                   y (range h)]
-               (vec (map xy->i (neighborhood-f [x y])))))))
-
-(defn make-seed
-  "Returns a vector of values based on calling f, which should return a lazy
-   infinite sequence."
-  [f w h]
-  (vec (take (* (long w) (long h)) (f))))
-
-(comment
-
-  (defn make-seed-for-age [w h]
-    (make-seed #(repeat (long 0) w h)))
-
-  (def random-color (partial rand-int 360))
-
-  (defn make-seed-for-random-color [w h]
-    (make-seed #(repeatedly random-color) w h))
-
-  (defn cell-color-blend
-    "Returns a color influenced by the colors of neighboring cells."
-    [weight [cell neighbors]]
-    (let [weight (int weight)
-          color (int cell)
-          n (int (count neighbors))
-          color-total (+ (* weight color) (int (reduce + neighbors)))
-          color-count (+ weight n)]
-      (quot color-total color-count)))
-
-  (defn cell-color-blending
-    "Returns a cell color-blending transducer."
-    [weight]
-    (map (partial cell-color-blend weight)))
-
-  (defn example-color-blend-ca-system [w h]
-    (let [seed (make-seed-for-random-color w h)
-          neighbors-index (make-neighbors-index neighborhood-8 w h)
-          contextualizing (partial contextualizing neighbors-index)
-          coloring (cell-color-blending 200)]
-      (dense-ca-system
-        seed
-        (gen (fn [generation word]
-               (comp (contextualizing word)
-                     coloring))))))
-
-  (def blend (example-color-ca-system 72 36))
-
-  (def random-life (partial rand-int 2))
-
-  (defn make-seed-for-random-life [w h]
-    (make-seed w h #(repeatedly random-life)))
-
-  (defn cell-life
-    "Returns a cell whose life status depends on neighboring cells."
-    [survive? birth? [cell neighbors]]
-    (let [live-neighbor-count (reduce + neighbors)]
-      (if (= cell 1)
-        (if (survive? live-neighbor-count) 1 0)
-        (if (birth? live-neighbor-count) 1 0))))
-
-  (defn cell-living
-    "Returns a cell living/dying transducer."
-    [survive? birth?]
-    (map (partial cell-life survive? birth?)))
-
-  (defn example-life-ca-system [survive? birth? nf w h]
-    (let [seed (make-seed-for-random-life w h)
-          neighbors-index (make-neighbors-index nf w h)
-          contextualizing (partial contextualizing neighbors-index)
-          living (cell-living survive? birth?)]
-      (dense-ca-system
-        seed
-        (gen (fn [generation word]
-               (comp (contextualizing word)
-                     living))))))
-
-  (defn gol (example-life-ca-system #{2 3} #{3} neighborhood-8 144 72))
-
-  )
-
-
-; -----------------------------------------------------------------------------
-; Life-Like Cellular Automata
-
-(declare lifepedia)
-
-(defn life-rules
-  "Returns the [survive? birth? neighborhood] rules trifecta from lifepedia."
-  [k]
-  (let [info (k lifepedia)]
-    [(:S info) (:B info) (:N info)]))
-
-
-; -----------------------------------------------------------------------------
-; Sparse Life-Like Cellular Automata
-
-(defn sparse-life-exist
-  "Returns a cell if destiny will allow, or mother nature brings it to life."
-  [survive? birth? cell-maker-f cells [cell-position neighbor-count]]
-  (if-let [cell (cells (cell-maker-f cell-position))]
-    (when (survive? neighbor-count) (cell-maker-f cell-position cells cell))
-    (when (birth? neighbor-count) (cell-maker-f cell-position cells))))
-
-(defn sparse-life-existing
-  "Returns an existence-determining transducer."
-  [survive? birth? cell-maker-f cells]
-  (keep (partial sparse-life-exist survive? birth? cell-maker-f cells)))
-
-(defn sparse-life-xf
-  [survive? birth? cell-maker-f cells]
-  ; TODO comp in a trim function based on the grid size/behavior rules.
-  (sparse-life-existing survive? birth? cell-maker-f cells))
-
-(defn sparse-life-system
-  [survive? birth? neighbor-freq-f cell-maker-f seed]
-  (let [seed (into #{} (map cell-maker-f) seed)
-        prep-f neighbor-freq-f
-        get-xf (partial sparse-life-xf survive? birth? cell-maker-f)]
-    (sparse-ca-system seed prep-f get-xf)))
-
-(defn sparse-life-rule-system
-  [rule-key cell-maker-f seed]
-  (let [[survive? birth? neighborhood-f] (life-rules rule-key)
-        neighbor-freq-f (partial neighbor-frequencies neighborhood-f)]
-    (sparse-life-system survive? birth? neighbor-freq-f cell-maker-f seed)))
-
-(comment ; Conway's Game of Life example using Acorn pattern as the seed.
-
-  (-> (sparse-life-rule-system :conway-game-of-life vector-cell (pattern :acorn)) (nth 10))
-
-  (-> (sparse-life-rule-system :conway-game-of-life basic-cell (pattern :acorn)) (nth 10))
-
-  )
 
 
 ; -----------------------------------------------------------------------------
@@ -517,6 +304,233 @@
   (-> (basic-fibonacci-sequence) (nth 10) count) ; 144
 
   )
+
+; -----------------------------------------------------------------------------
+; General Cellular Automata
+
+(declare patternpedia)
+
+(defn pattern
+  "Returns the set of cells specified by the key from the patternpedia."
+  [k]
+  (k patternpedia))
+
+
+; -----------------------------------------------------------------------------
+; Life-Like Cellular Automata
+
+(declare lifepedia)
+
+(defn life-rules
+  "Returns the [survive? birth? neighborhood] rules trifecta from lifepedia."
+  [k]
+  (let [info (k lifepedia)]
+    [(:S info) (:B info) (:N info)]))
+
+
+; -----------------------------------------------------------------------------
+; Densely-Populated Toroidal Grids of Cellular Automata
+
+(defn make-neighbors-index
+  "Returns a vector of vectors of neighbors for each cell."
+  [neighborhood-f w h]
+  (let [xy->i (partial whxy->i w h)]
+    (into [] (for [x (range w)
+                   y (range h)]
+               (vec (map xy->i (neighborhood-f [x y])))))))
+
+(defn make-seed
+  "Returns a vector of values based on calling f, which should return a lazy
+   infinite sequence."
+  [f w h]
+  (vec (take (* (long w) (long h)) (f))))
+
+(defn make-seed-for-random-cell-value [cell-values w h]
+  (make-seed #(repeatedly (fn random-value [] (rand-nth cell-values))) w h))
+
+(defn dense-life-ca-system
+  [survive? birth? nf live-cell dead-cell seed w h]
+  (let [neighbors-index (make-neighbors-index nf w h)
+        contextualizing (partial contextualizing neighbors-index)
+        alive? (fn [cell] (= live-cell cell))
+        living (cell-living live-cell dead-cell alive? survive? birth?)]
+    (dense-ca-system seed (gen (fn [generation word]
+                                 (comp (contextualizing word)
+                                       living))))))
+
+(defn dense-life-rule-system
+  [rule-key live-cell dead-cell seed w h]
+  (let [[survive? birth? neighborhood-f] (life-rules rule-key)]
+    (dense-life-ca-system
+      survive? birth? neighborhood-f live-cell dead-cell seed w h)))
+
+(comment
+
+  (defn dense-random-conway-game-of-life
+    "Example of Conway's Game of Life in a densely-populated toroidal grid,
+     representing live cells as :alive and dead cells as :dead, randomly seeded."
+    [w h]
+    (dense-life-ca-system
+      #{2 3} #{3} neighborhood-8 :alive :dead
+      (make-seed-for-random-cell-value [:alive :dead] w h) w h))
+
+  )
+
+(comment
+
+  "Example system where the color of each cell becomes a blend of its
+   neighbors' colors."
+
+  (def random-color (partial rand-int 360))
+
+  (defn make-seed-for-random-color [w h]
+    (make-seed #(repeatedly random-color) w h))
+
+  (defn cell-color-blend
+    "Returns a color influenced by the colors of neighboring cells."
+    [weight [cell neighbors]]
+    (let [weight (int weight)
+          color (int cell)
+          n (int (count neighbors))
+          color-total (+ (* weight color) (int (reduce + neighbors)))
+          color-count (+ weight n)]
+      (quot color-total color-count)))
+
+  (defn cell-color-blending
+    "Returns a cell color-blending transducer."
+    [weight]
+    (map (partial cell-color-blend weight)))
+
+  (defn dense-color-blend-ca-system [w h]
+    (let [seed (make-seed-for-random-color w h)
+          neighbors-index (make-neighbors-index neighborhood-8 w h)
+          contextualizing (partial contextualizing neighbors-index)
+          coloring (cell-color-blending 200)]
+      (dense-ca-system
+        seed
+        (gen (fn [generation word]
+               (comp (contextualizing word)
+                     coloring))))))
+
+  (def example-blend-ca (dense-color-blend-ca-system 72 36))
+
+  )
+
+
+; -----------------------------------------------------------------------------
+; Protocols/Records/Types for Sparse Sets of Cellular Automata
+
+(defprotocol IPosition
+  (position [this])
+  (x [this])
+  (y [this])
+  (z [this]))
+
+(extend-protocol IPosition
+  clojure.lang.PersistentVector
+  (position [v] v)
+  (x [v] (get v 0))
+  (y [v] (get v 1))
+  (z [v] (get v 2)))
+
+#?(:clj
+   (deftype Cell [x-coord y-coord]
+     IPosition
+     (position [_] [x-coord y-coord])
+     (x [_] x-coord)
+     (y [_] y-coord)
+     Object
+     (equals [_ o]
+       (and (satisfies? IPosition o)
+            (and (= x-coord (x ^Cell o))
+                 (= y-coord (y ^Cell o)))))
+     (hashCode [_] (hash [x-coord y-coord]))))
+
+#?(:clj
+   (defmethod clojure.core/print-method Cell [this ^java.io.Writer writer]
+     (.write writer (str "<Cell " (position this) ">"))))
+
+#?(:cljs
+   (deftype Cell [x-coord y-coord]
+     IPosition
+     (position [_] [x-coord y-coord])
+     (x [_] x-coord)
+     (y [_] y-coord)
+     IEquiv
+     (-equiv [_ o]
+       (and (instance? Cell o)
+            (and (= x-coord (x ^Cell o))
+                 (= y-coord (y ^Cell o)))))
+     IHash
+     (-hash [_] (hash [x-coord y-coord]))))
+
+(defn basic-cell
+  ([[x y]] ; Candidate cell, only used temporarily to test set membership.
+   (->Cell x y))
+  ([[x y] cells] ; Newborn cell.
+   (->Cell x y))
+  ([[x y] cells cell] ; Survivor.
+   (->Cell x y)))
+
+(defn vector-cell
+  ([v] ; Candidate cell, only used temporarily to test set membership.
+   v)
+  ([v cells] ; Newborn cell.
+   v)
+  ([v cells cell] ; Survivor.
+   v))
+
+
+; -----------------------------------------------------------------------------
+; Sparse Sets of Life-Like Cellular Automata
+
+(defn neighbor-frequencies
+  "Returns a map of [x y] neighbor-count pairs for a set of cells based on the
+   neighborhood function."
+  [neighborhood-f cells]
+  (frequencies (mapcat #(neighborhood-f (position %)) cells)))
+
+(defn sparse-life-exist
+  "Returns a function that returns a cell if destiny will allow it to survive,
+   or a newborn cell if mother nature brings it to life."
+  [survive? birth? cell-maker-f cells]
+  (fn sparse-life-cell-fate [[cell-position neighbor-count]]
+    (if-let [cell (cells (cell-maker-f cell-position))]
+      (when (survive? neighbor-count) (cell-maker-f cell-position cells cell))
+      (when (birth? neighbor-count) (cell-maker-f cell-position cells)))))
+
+(defn sparse-life-existing
+  "Returns an existence-determining transducer."
+  [survive? birth? cell-maker-f cells]
+  (keep (sparse-life-exist survive? birth? cell-maker-f cells)))
+
+(defn sparse-life-xf
+  [survive? birth? cell-maker-f cells]
+  ; TODO comp in a trim function based on the x & y extents.
+  (sparse-life-existing survive? birth? cell-maker-f cells))
+
+(defn sparse-life-ca-system
+  [survive? birth? neighborhood-f cell-maker-f seed]
+  (let [seed (into #{} (map cell-maker-f) seed)
+        prep-f (partial neighbor-frequencies neighborhood-f)
+        get-xf (partial sparse-life-xf survive? birth? cell-maker-f)]
+    (sparse-ca-system seed prep-f get-xf)))
+
+(defn sparse-life-rule-system
+  [rule-key cell-maker-f seed]
+  (let [[survive? birth? neighborhood-f] (life-rules rule-key)]
+    (sparse-life-ca-system survive? birth? neighborhood-f cell-maker-f seed)))
+
+(comment
+
+  "Conway's Game of Life example using Acorn pattern as the seed."
+
+  (-> (sparse-life-rule-system :conway-game-of-life vector-cell (pattern :acorn)) (nth 10))
+
+  (-> (sparse-life-rule-system :conway-game-of-life basic-cell (pattern :acorn)) (nth 10))
+
+  )
+
 
 ; -----------------------------------------------------------------------------
 ; Grammarpedia
