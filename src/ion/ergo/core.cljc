@@ -99,8 +99,6 @@
                   (cons new-coll (process new-coll))))))]
     (process seed)))
 
-(def rewriting-system (partial produce [::axiom] identity))
-
 (defn get-rewriting-rules
   "Returns the rules for a generation, calling any rules written as functions."
   [axiom rules generation]
@@ -108,11 +106,18 @@
     {::axiom axiom}
     (if (fn? rules) (rules generation) rules)))
 
+(defn rewriting-system
+  "Returns a rewriting (Lindenmayer) system."
+  [get-xf]
+  (produce [::axiom] identity get-xf))
+
 (defn dense-ca-system
+  "Returns a densely-populated toroidal grid cellular automata system."
   [seed get-xf]
   (cons seed (produce seed identity get-xf)))
 
 (defn sparse-ca-system
+  "Returns a sparsely-populated set-of-cells-based cellular automata system."
   [seed prep-f get-xf]
   (cons (set seed) (produce (set seed) prep-f get-xf)))
 
