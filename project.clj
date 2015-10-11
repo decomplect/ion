@@ -9,4 +9,4 @@
    [criterium "0.4.3"]
    [spellhouse/phalanges "0.1.6"]]
   :source-paths
-  ["src"])
+  ["src" "examples"])

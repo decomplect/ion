@@ -38,7 +38,8 @@
   (let [x (double x)] (if (< x -1.0) -1.0 (if (> x 1.0) 1.0 x))))
 
 (defn neighborhood
-  "Returns a function that returns a vector of [x y] pairs of a neighborhood."
+  "Returns a function that returns a lazy sequence of [x y] pairs of a
+   neighborhood for a given [x y] vector."
   [nf-x nf-y]
   (fn [[x y]]
     (map vector (nf-x x) (nf-y y))))
@@ -63,6 +64,15 @@
 
 (def neighborhood-9 (neighborhood neighborhood-9-x neighborhood-9-y))
 
+(defn wi->xy
+  "Returns the [x y] coordinates for index based on the width of the grid."
+  [w i]
+  (let [w (long w)
+        i (long i)
+        x (mod i w)
+        y (quot i w)]
+    [x y]))
+
 (defn hi->xy
   "Returns the [x y] coordinates for index based on the height of the grid."
   [h i]
@@ -80,16 +90,16 @@
         h (long h)
         x (long (mod x w))
         y (long (mod y h))
-        i (+ (* x h) y)]
+        i (+ x (* y w))]
     i))
 
 
 ; -----------------------------------------------------------------------------
-; Recursive Axiomatic Transducible Sequence (RATS) Producer
+; Recursive Axiomatic Transformative Sequence (RATS) Producer
 
 (defn produce
-  "Returns a lazy sequence of colls from a recursive, axiomatic, transducible
-   process."
+  "Returns a lazy sequence of colls from a recursive, axiomatic,
+   transformative process."
   [seed prep-f get-xf]
   (letfn [(process
             [coll]
@@ -163,7 +173,7 @@
      (fn context-sensitive-call [successor]
        (vswap! index #(inc (long %)))
        (if (fn? successor)
-         (successor generation word @index (get word @index))
+         (successor generation word @index (nth word @index))
          successor)))))
 
 (defn calling
@@ -175,14 +185,14 @@
 
 (defn get-neighbors
   "Returns a lazy sequence of neighbors of the module at index in word."
-  [neighbors-index word index]
-  (map #(nth word %) (nth neighbors-index index)))
+  [neighbors-lookup word index]
+  (map #(nth word %) (nth neighbors-lookup index)))
 
 (defn contextualize
   "Returns a function that will return the module/cell and its neighbors."
-  [neighbors-index word]
+  [neighbors-lookup word]
   (let [index (volatile! (long -1))
-        get-n (partial get-neighbors neighbors-index word)]
+        get-n (partial get-neighbors neighbors-lookup word)]
     (fn module-and-neighbors [m]
       (vswap! index #(inc (long %)))
       (let [neighbors (get-n @index)]
@@ -196,10 +206,10 @@
 (defn cell-life
   "Returns a function that returns a cell whose fate depends on the number of
    live neighboring cells."
-  [live-cell dead-cell alive? survive? birth?]
+  [live-cell dead-cell live-count-f survive? birth?]
   (fn cell-fate [[cell neighbors]]
-    (let [live-neighbor-count (count (filter alive? neighbors))]
-      (if (alive? cell)
+    (let [live-neighbor-count (reduce live-count-f 0 neighbors)]
+      (if (= live-cell cell)
         (if (survive? live-neighbor-count) live-cell dead-cell)
         (if (birth? live-neighbor-count) live-cell dead-cell)))))
 
@@ -330,13 +340,18 @@
 ; -----------------------------------------------------------------------------
 ; Densely-Populated Toroidal Grids of Cellular Automata
 
-(defn make-neighbors-index
-  "Returns a vector of vectors of neighbors for each cell."
+(defn cell-counter
+  "Returns a functions that counts cells having a certain value."
+  [cell-value]
+  (fn [n cell] (if (= cell-value cell) (inc n) n)))
+
+(defn make-neighbors-lookup
+  "Returns a vector of lazy sequences of neighbors for each cell."
   [neighborhood-f w h]
   (let [xy->i (partial whxy->i w h)]
-    (into [] (for [x (range w)
-                   y (range h)]
-               (vec (map xy->i (neighborhood-f [x y])))))))
+    (into [] (for [y (range h)
+                   x (range w)]
+               (mapv xy->i (neighborhood-f [x y]))))))
 
 (defn make-seed
   "Returns a vector of values based on calling f, which should return a lazy
@@ -348,14 +363,14 @@
   (make-seed #(repeatedly (fn random-value [] (rand-nth cell-values))) w h))
 
 (defn dense-life-ca-system
-  [survive? birth? nf live-cell dead-cell seed w h]
-  (let [neighbors-index (make-neighbors-index nf w h)
-        contextualizing (partial contextualizing neighbors-index)
-        alive? (fn [cell] (= live-cell cell))
-        living (cell-living live-cell dead-cell alive? survive? birth?)]
-    (dense-ca-system seed (gen (fn [generation word]
-                                 (comp (contextualizing word)
-                                       living))))))
+  [survive? birth? neighborhood-f live-cell dead-cell seed w h]
+  (let [neighbors-lookup (make-neighbors-lookup neighborhood-f w h)
+        contextualizing (partial contextualizing neighbors-lookup)
+        live-count-f (cell-counter live-cell)
+        living (cell-living live-cell dead-cell live-count-f survive? birth?)]
+    (dense-ca-system
+      seed (gen (fn [generation word]
+                  (comp (contextualizing word) living))))))
 
 (defn dense-life-rule-system
   [rule-key live-cell dead-cell seed w h]
@@ -402,7 +417,7 @@
 
   (defn dense-color-blend-ca-system [w h]
     (let [seed (make-seed-for-random-color w h)
-          neighbors-index (make-neighbors-index neighborhood-8 w h)
+          neighbors-index (make-neighbors-lookup neighborhood-8 w h)
           contextualizing (partial contextualizing neighbors-index)
           coloring (cell-color-blending 200)]
       (dense-ca-system
