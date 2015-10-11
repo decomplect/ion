@@ -196,7 +196,7 @@
     (fn module-and-neighbors [m]
       (vswap! index #(inc (long %)))
       (let [neighbors (get-n @index)]
-        [m neighbors]))))
+        [m neighbors @index]))))
 
 (defn contextualizing
   "Returns a module/cell-and-neighbors contextualizing transducer."
@@ -206,17 +206,19 @@
 (defn cell-life
   "Returns a function that returns a cell whose fate depends on the number of
    live neighboring cells."
-  [live-cell dead-cell live-count-f survive? birth?]
-  (fn cell-fate [[cell neighbors]]
-    (let [live-neighbor-count (reduce live-count-f 0 neighbors)]
-      (if (= live-cell cell)
-        (if (survive? live-neighbor-count) live-cell dead-cell)
-        (if (birth? live-neighbor-count) live-cell dead-cell)))))
+  [live-cell dead-cell live-count-f survive? birth? candidate?]
+  (fn cell-fate [[cell neighbors index]]
+    (if-not (candidate? index)
+      dead-cell
+      (let [live-neighbor-count (reduce live-count-f 0 neighbors)]
+        (if (= live-cell cell)
+          (if (survive? live-neighbor-count) live-cell dead-cell)
+          (if (birth? live-neighbor-count) live-cell dead-cell))))))
 
 (defn cell-living
   "Returns a cell living/dying transducer."
-  [live-cell dead-cell alive? survive? birth?]
-  (map (cell-life live-cell dead-cell alive? survive? birth?)))
+  [live-cell dead-cell alive? survive? birth? candidate?]
+  (map (cell-life live-cell dead-cell alive? survive? birth? candidate?)))
 
 
 ; -----------------------------------------------------------------------------
@@ -362,15 +364,29 @@
 (defn make-seed-for-random-cell-value [cell-values w h]
   (make-seed #(repeatedly (fn random-value [] (rand-nth cell-values))) w h))
 
+(defn get-candidates
+  "Returns the set of all the live cells and their neighbors."
+  [neighbors-lookup live-cell word]
+  (let [xf (comp
+             (map (fn [[index cell]]
+                    (if (= live-cell cell)
+                      (conj (neighbors-lookup index) index)
+                      [])))
+             cat)]
+    (into #{} xf (map vector (range) word))))
+
 (defn dense-life-ca-system
   [survive? birth? neighborhood-f live-cell dead-cell seed w h]
   (let [neighbors-lookup (make-neighbors-lookup neighborhood-f w h)
-        contextualizing (partial contextualizing neighbors-lookup)
+        context (partial contextualizing neighbors-lookup)
         live-count-f (cell-counter live-cell)
-        living (cell-living live-cell dead-cell live-count-f survive? birth?)]
+        living (partial cell-living live-cell dead-cell
+                        live-count-f survive? birth?)]
     (dense-ca-system
-      seed (gen (fn [generation word]
-                  (comp (contextualizing word) living))))))
+      seed
+      (gen (fn [generation word]
+             (let [candidate? (get-candidates neighbors-lookup live-cell word)]
+               (comp (context word) (living candidate?))))))))
 
 (defn dense-life-rule-system
   [rule-key live-cell dead-cell seed w h]
