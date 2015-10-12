@@ -3,7 +3,7 @@
    for the pursuit of algorithmic beauty within the gardens of your mind.")
 
 (set! *warn-on-reflection* true)
-;(set! *unchecked-math* :warn-on-boxed)
+(set! *unchecked-math* :warn-on-boxed)
 
 
 ; -----------------------------------------------------------------------------
@@ -248,7 +248,7 @@
 
 (defn gen
   "Returns a function that, when called, will call f with an incremented
-   generation number and an additional context argument."
+   generation number and an additional context data argument."
   [f]
   (let [generation (volatile! (long -1))]
     (fn
@@ -364,19 +364,6 @@
 ; -----------------------------------------------------------------------------
 ; Densely-Populated Toroidal Grids of Cellular Automata
 
-(defn cell-counter
-  "Returns a functions that counts cells having a certain value."
-  [cell-value]
-  (fn [n cell] (if (= cell-value cell) (inc n) n)))
-
-(defn make-neighbors-lookup
-  "Returns a vector of lazy sequences of neighbors for each cell."
-  [neighborhood-f w h]
-  (let [xy->i (partial whxy->i w h)]
-    (into [] (for [y (range h)
-                   x (range w)]
-               (mapv xy->i (neighborhood-f [x y]))))))
-
 (defn make-seed
   "Returns a vector of values based on calling f, which should return a lazy
    infinite sequence."
@@ -403,6 +390,19 @@
   [live-cell dead-cell w h]
   (make-seed-for-pattern
     live-cell dead-cell w h #{[0 2] [1 0] [1 2] [3 1] [4 2] [5 2] [6 2]}))
+
+(defn cell-counter
+  "Returns a functions that counts cells having a certain value."
+  [cell-value]
+  (fn [n cell] (if (= cell-value cell) (inc (long n)) n)))
+
+(defn make-neighbors-lookup
+  "Returns a vector of vectors of neighbors for each cell."
+  [neighborhood-f w h]
+  (let [xy->i (partial whxy->i w h)]
+    (into [] (for [y (range h)
+                   x (range w)]
+               (mapv xy->i (neighborhood-f [x y]))))))
 
 (defn get-neighbors
   "Returns a function that returns a lazy sequence of neighbors of the cell at
