@@ -82,15 +82,28 @@
         y (mod i h)]
     [x y]))
 
-(defn whxy->i
-  "Returns the index for the [x y] coordinates with toroidal adjustments
-   applied to the x and y values based on the grid width and grid height."
+(defn row-whxy->i
+  "Returns the linear index position in a row-major-ordered 1D array for the
+   given [x y] coordinates with toroidal adjustments applied to the x and y
+   values based on the grid width and grid height."
   [w h [x y]]
   (let [w (long w)
         h (long h)
         x (long (mod x w))
         y (long (mod y h))
         i (+ x (* y w))]
+    i))
+
+(defn col-whxy->i
+  "Returns the linear index position in a column-major-ordered 1D array for
+   the given [x y] coordinates with toroidal adjustments applied to the x and y
+   values based on the grid width and grid height."
+  [w h [x y]]
+  (let [w (long w)
+        h (long h)
+        x (long (mod x w))
+        y (long (mod y h))
+        i (+ (* x h) y)]
     i))
 
 
@@ -173,7 +186,7 @@
      (fn context-sensitive-call [successor]
        (vswap! index #(inc (long %)))
        (if (fn? successor)
-         (successor generation word @index (nth word @index))
+         (successor generation word @index (word @index))
          successor)))))
 
 (defn calling
@@ -370,7 +383,8 @@
   [f w h]
   (vec (take (* (long w) (long h)) (f))))
 
-(defn make-seed-for-random-cell-value [cell-values w h]
+(defn make-seed-for-random-cell-value
+  [cell-values w h]
   (make-seed #(repeatedly (fn random-value [] (rand-nth cell-values))) w h))
 
 (defn make-seed-2
@@ -399,7 +413,7 @@
 (defn make-neighbors-lookup
   "Returns a vector of vectors of neighbors for each cell."
   [neighborhood-f w h]
-  (let [xy->i (partial whxy->i w h)]
+  (let [xy->i (partial row-whxy->i w h)]
     (into [] (for [y (range h)
                    x (range w)]
                (mapv xy->i (neighborhood-f [x y]))))))
@@ -408,7 +422,7 @@
   "Returns a function that returns a lazy sequence of neighbors of the cell at
    index in word."
   [neighbors-lookup word]
-  (fn [index] (map #(word %) (neighbors-lookup index))))
+  (fn [index] (map word (neighbors-lookup index))))
 
 (defn get-candidates
   "Returns the set of cell-index values for non-dead cells and their
