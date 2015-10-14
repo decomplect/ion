@@ -65,7 +65,8 @@
 (def neighborhood-9 (neighborhood neighborhood-9-x neighborhood-9-y))
 
 (defn wi->xy
-  "Returns the [x y] coordinates for index based on the width of the grid."
+  "Returns the [x y] coordinates for a row-major order index position based on
+   the width of the grid."
   [w i]
   (let [w (long w)
         i (long i)
@@ -74,7 +75,8 @@
     [x y]))
 
 (defn hi->xy
-  "Returns the [x y] coordinates for index based on the height of the grid."
+  "Returns the [x y] coordinates for a column-major order index position based
+   on the height of the grid."
   [h i]
   (let [h (long h)
         i (long i)
@@ -209,13 +211,7 @@
           (if (survive? live-neighbor-count) live-cell dead-cell)
           (if (birth? live-neighbor-count) live-cell dead-cell))))))
 
-(defn cell-living
-  "Returns a cell living/dying transducer."
-  [live-cell dead-cell survive? birth? live-count-f neighbors-f]
-  (map (cell-life live-cell dead-cell survive? birth?
-                  live-count-f neighbors-f)))
-
-(defn fast-cell-life
+(defn cell-life-candidate-set
   "Returns a function that returns a cell whose fate depends on the number of
    live neighboring cells."
   [live-cell dead-cell survive? birth? live-count-f neighbors-f candidate?]
@@ -230,13 +226,7 @@
             (if (survive? live-neighbor-count) live-cell dead-cell)
             (if (birth? live-neighbor-count) live-cell dead-cell)))))))
 
-(defn fast-cell-living
-  "Returns a cell living/dying transducer."
-  [live-cell dead-cell survive? birth? live-count-f neighbors-f candidate?]
-  (map (fast-cell-life live-cell dead-cell survive? birth?
-                       live-count-f neighbors-f candidate?)))
-
-(defn faster-cell-life
+(defn cell-life-candidate-counts
   "Returns a function that returns a cell whose fate depends on the number of
    live neighboring cells."
   [live-cell dead-cell survive? birth? candidate-counts]
@@ -248,12 +238,6 @@
           (if (survive? live-neighbor-count) live-cell dead-cell)
           (if (birth? live-neighbor-count) live-cell dead-cell))
         dead-cell))))
-
-(defn faster-cell-living
-  "Returns a cell living/dying transducer."
-  [live-cell dead-cell survive? birth? candidate-counts]
-  (map (faster-cell-life live-cell dead-cell survive? birth?
-                         candidate-counts)))
 
 
 ; -----------------------------------------------------------------------------
@@ -411,11 +395,12 @@
   (fn [n cell] (if (= cell-value cell) (inc (long n)) n)))
 
 (defn make-neighbors-lookup
-  "Returns a vector of vectors of neighbors for each cell."
-  [neighborhood-f w h]
-  (let [xy->i (partial row-whxy->i w h)]
-    (into [] (for [y (range h)
-                   x (range w)]
+  "Returns a row-major order vector of vectors of neighborhood positions for
+   each cell position for a given width and height."
+  [neighborhood-f width height]
+  (let [xy->i (partial row-whxy->i width height)]
+    (into [] (for [y (range height)
+                   x (range width)]
                (mapv xy->i (neighborhood-f [x y]))))))
 
 (defn get-neighbors
@@ -445,36 +430,37 @@
   [survive? birth? neighborhood-f live-cell dead-cell seed w h]
   (let [neighbors-lookup (make-neighbors-lookup neighborhood-f w h)
         live-count-f (cell-counter live-cell)
-        living (partial cell-living live-cell dead-cell
-                        survive? birth? live-count-f)]
+        life (partial cell-life live-cell dead-cell
+                      survive? birth? live-count-f)]
     (dense-ca-system
       seed
       (gen (fn [generation word]
              (let [neighbors-f (get-neighbors neighbors-lookup word)]
-               (living neighbors-f)))))))
+               (map (life neighbors-f))))))))
 
-(defn fast-dense-life-ca-system
+(defn dense-life-candidate-set-ca-system
   [survive? birth? neighborhood-f live-cell dead-cell seed w h]
   (let [neighbors-lookup (make-neighbors-lookup neighborhood-f w h)
         live-count-f (cell-counter live-cell)
-        living (partial fast-cell-living live-cell dead-cell
-                        survive? birth? live-count-f)]
+        life (partial cell-life-candidate-set live-cell dead-cell
+                      survive? birth? live-count-f)]
     (dense-ca-system
       seed
       (gen (fn [generation word]
              (let [neighbors-f (get-neighbors neighbors-lookup word)
                    candidate? (get-candidates dead-cell neighbors-lookup word)]
-               (living neighbors-f candidate?)))))))
+               (map (life neighbors-f candidate?))))))))
 
-(defn faster-dense-life-ca-system
+(defn dense-life-candidate-counts-ca-system
   [survive? birth? neighborhood-f live-cell dead-cell seed w h]
   (let [neighbors-lookup (make-neighbors-lookup neighborhood-f w h)
-        living (partial faster-cell-living live-cell dead-cell survive? birth?)]
+        life (partial cell-life-candidate-counts live-cell dead-cell
+                      survive? birth?)]
     (dense-ca-system
       seed
       (gen (fn [generation word]
              (let [counts (get-candidate-counts dead-cell neighbors-lookup word)]
-               (living counts)))))))
+               (map (life counts))))))))
 
 (defn dense-life-rule-system
   [rule-key live-cell dead-cell seed w h]
