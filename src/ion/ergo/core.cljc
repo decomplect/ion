@@ -367,9 +367,9 @@
   [f w h]
   (vec (take (* (long w) (long h)) (f))))
 
-(defn make-seed-for-random-cell-value
+(defn make-seed-with-random-values
   [cell-values w h]
-  (make-seed #(repeatedly (fn random-value [] (rand-nth cell-values))) w h))
+  (make-seed #(repeatedly (fn [] (rand-nth cell-values))) w h))
 
 (defn make-seed-2
   "Returns a vector of values based on calling (f x y)."
@@ -394,7 +394,7 @@
   [cell-value]
   (fn [n cell] (if (= cell-value cell) (inc (long n)) n)))
 
-(defn make-neighbors-lookup
+(defn make-neighborhood-lookup
   "Returns a row-major order vector of vectors of neighborhood positions for
    each cell position for a given width and height."
   [neighborhood-f width height]
@@ -406,60 +406,69 @@
 (defn get-neighbors
   "Returns a function that returns a lazy sequence of neighbors of the cell at
    index in word."
-  [neighbors-lookup word]
-  (fn [index] (map word (neighbors-lookup index))))
+  [neighborhood-lookup word]
+  (fn [index] (map word (neighborhood-lookup index))))
 
 (defn get-candidates
   "Returns the set of cell-index values for non-dead cells and their
    neighbors."
-  [dead-cell neighbors-lookup word]
+  [dead-cell neighborhood-lookup word]
   (let [f (fn [index cell]
             (when (not= dead-cell cell)
-              (conj (neighbors-lookup index) index)))]
+              (conj (neighborhood-lookup index) index)))]
     (set (apply concat (keep-indexed f word)))))
 
 (defn get-candidate-counts
   "Returns a map of candidate-cell-index neighbor-count pairs."
-  [dead-cell neighbors-lookup word]
+  [dead-cell neighborhood-lookup word]
   (let [f (fn [index cell]
             (when (not= dead-cell cell)
-              (neighbors-lookup index)))]
+              (neighborhood-lookup index)))]
     (frequencies (apply concat (keep-indexed f word)))))
+
+(defn dense-fate-ca-system
+  [cell-fate-f neighborhood-f seed w h]
+  (let [neighborhood-lookup (make-neighborhood-lookup neighborhood-f w h)]
+    (dense-ca-system
+      seed
+      (gen (fn [generation word]
+             (let [neighbors-f (get-neighbors neighborhood-lookup word)]
+               (map (cell-fate-f generation neighbors-f))))))))
 
 (defn dense-life-ca-system
   [survive? birth? neighborhood-f live-cell dead-cell seed w h]
-  (let [neighbors-lookup (make-neighbors-lookup neighborhood-f w h)
+  (let [neighborhood-lookup (make-neighborhood-lookup neighborhood-f w h)
         live-count-f (cell-counter live-cell)
         life (partial cell-life live-cell dead-cell
                       survive? birth? live-count-f)]
     (dense-ca-system
       seed
       (gen (fn [generation word]
-             (let [neighbors-f (get-neighbors neighbors-lookup word)]
+             (let [neighbors-f (get-neighbors neighborhood-lookup word)]
                (map (life neighbors-f))))))))
 
 (defn dense-life-candidate-set-ca-system
   [survive? birth? neighborhood-f live-cell dead-cell seed w h]
-  (let [neighbors-lookup (make-neighbors-lookup neighborhood-f w h)
+  (let [neighborhood-lookup (make-neighborhood-lookup neighborhood-f w h)
         live-count-f (cell-counter live-cell)
         life (partial cell-life-candidate-set live-cell dead-cell
                       survive? birth? live-count-f)]
     (dense-ca-system
       seed
       (gen (fn [generation word]
-             (let [neighbors-f (get-neighbors neighbors-lookup word)
-                   candidate? (get-candidates dead-cell neighbors-lookup word)]
+             (let [neighbors-f (get-neighbors neighborhood-lookup word)
+                   candidate? (get-candidates dead-cell neighborhood-lookup word)]
                (map (life neighbors-f candidate?))))))))
 
 (defn dense-life-candidate-counts-ca-system
   [survive? birth? neighborhood-f live-cell dead-cell seed w h]
-  (let [neighbors-lookup (make-neighbors-lookup neighborhood-f w h)
+  (let [neighborhood-lookup (make-neighborhood-lookup neighborhood-f w h)
         life (partial cell-life-candidate-counts live-cell dead-cell
                       survive? birth?)]
     (dense-ca-system
       seed
       (gen (fn [generation word]
-             (let [counts (get-candidate-counts dead-cell neighbors-lookup word)]
+             (let [counts (get-candidate-counts dead-cell neighborhood-lookup word)]
                (map (life counts))))))))
 
 (defn dense-life-rule-system
@@ -477,7 +486,7 @@
     [w h]
     (dense-life-ca-system
       #{2 3} #{3} neighborhood-8 :alive :dead
-      (make-seed-for-random-cell-value [:alive :dead] w h) w h))
+      (make-seed-for-random-value [:alive :dead] w h) w h))
 
   )
 
@@ -670,12 +679,14 @@
 (def lifepedia
   {:conway-game-of-life
    {:S #{2 3} :B #{3} :N neighborhood-8}
+   :fredkin
+   {:S #{1 3 5 7 9} :B #{1 3 5 7 9} :N neighborhood-9}
    :gnarl
    {:S #{1} :B #{1} :N neighborhood-8}
    :replicator
    {:S #{1 3 5 7} :B #{1 3 5 7} :N neighborhood-8}
-   :fredkin
-   {:S #{1 3 5 7 9} :B #{1 3 5 7 9} :N neighborhood-9}
+   :seeds
+   {:S #{} :B #{2} :N neighborhood-8}
    })
 
 
